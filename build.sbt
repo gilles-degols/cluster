@@ -1,6 +1,3 @@
-import play.sbt.PlayScala
-import sbt.RootProject
-
 name := "cluster"
 organization := "net.degols.filesgate.libs"
 version := "0.0.1"
@@ -34,10 +31,10 @@ val electionPath = "../election"
 lazy val electionLibrary: RootProject = RootProject(file(electionPath))
 val useLocalElectionLibrary = true
 val localElectionAvailable = scala.reflect.io.File(scala.reflect.io.Path(electionPath)).exists
-lazy val proj = if(localElectionAvailable && useLocalElectionLibrary) {
-  (project in file(".")).enablePlugins(PlayScala).dependsOn(electionLibrary)
+lazy val cluster = if(localElectionAvailable && useLocalElectionLibrary) {
+  (project in file(".")).dependsOn(electionLibrary)
 } else {
-  (project in file(".")).enablePlugins(PlayScala)
+  (project in file("."))
 }
 
 lazy val electionDependency = if(localElectionAvailable && useLocalElectionLibrary) {
