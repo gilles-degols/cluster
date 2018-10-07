@@ -1,5 +1,4 @@
-package net.degols.filesgate.libs.election
-
+package net.degols.filesgate.libs.cluster
 
 import java.io.File
 
@@ -45,7 +44,7 @@ class ConfigurationService @Inject()(defaultConfig: Config) {
 
   /**
     * Configuration for the cluster system. We merge multiple configuration files: One embedded, the other one from the project
-    * using the election library
+    * using the cluster library
     */
   val clusterConfig: Config = config.getConfig("cluster")
 
