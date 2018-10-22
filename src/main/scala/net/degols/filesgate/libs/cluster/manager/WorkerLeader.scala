@@ -2,6 +2,7 @@ package net.degols.filesgate.libs.cluster.manager
 
 import akka.actor.{Actor, ActorRef, Terminated}
 import com.google.inject.{Inject, Singleton}
+import net.degols.filesgate.libs.cluster.{ConfigurationService, Tools}
 import net.degols.filesgate.libs.cluster.messages._
 import net.degols.filesgate.libs.election.{IAmFollower, IAmLeader, TheLeaderIs}
 import org.slf4j.LoggerFactory
@@ -14,13 +15,22 @@ import scala.util.{Failure, Success, Try}
   * knowing which WorkerActors are available, and how to start them.
   */
 @Singleton
-abstract class WorkerLeader @Inject()(localManager: Manager) extends Actor{
+abstract class WorkerLeader @Inject()(localManager: Manager, configurationService: ConfigurationService) extends Actor{
   private val logger = LoggerFactory.getLogger(getClass)
 
   override def preStart(): Unit = {
     super.preStart()
     // Inform the localManager of our existence
     localManager.self ! IAmTheWorkerLeader
+  }
+
+  /**
+    * In very specific case the developer might wants to override this value
+    */
+  val nodeInfo: NodeInfo = {
+    val networkHostname = Tools.remoteActorPath(self)
+    val localHostname = configurationService.localHostname
+    NodeInfo(networkHostname, localHostname)
   }
 
   /**
@@ -33,6 +43,8 @@ abstract class WorkerLeader @Inject()(localManager: Manager) extends Actor{
     */
   lazy val jvmTopology = JVMTopology(self)
 
+  // TODO: Add suicide when we didn't get a new Manager in a short amount of time. Or better: send a message to all
+  // actors to stop their work, and it will be resumed by the manager
   override def aroundReceive(receive: Receive, msg: Any): Unit = {
     logger.debug(s"Around Receive: $msg")
     msg match {
@@ -44,6 +56,7 @@ abstract class WorkerLeader @Inject()(localManager: Manager) extends Actor{
           case Some(currentManager) =>
             logger.debug("Send all workerTypeInfo to the manager")
             allWorkerTypeInfo.foreach(workerTypeInfo => {
+              workerTypeInfo.nodeInfo = nodeInfo
               currentManager ! workerTypeInfo
             })
           case None => // Nothing to do
@@ -82,7 +95,8 @@ abstract class WorkerLeader @Inject()(localManager: Manager) extends Actor{
             // Setting a watcher can leads to failure if the actors just dies at that moment
             Try{context.watch(res)} match {
               case Success(s) =>
-                val workerActorHealth = WorkerActorHealth(self, message.workerTypeId, res)
+                val jvmId = Tools.jvmIdFromActorRef(self)
+                val workerActorHealth = WorkerActorHealth(self, message.workerTypeId, res, nodeInfo, jvmId, self)
                 jvmTopology.addWorkerActor(workerActorHealth)
                 message.actorRef ! StartedWorkerActor(self, message, res)
               case Failure(e) =>

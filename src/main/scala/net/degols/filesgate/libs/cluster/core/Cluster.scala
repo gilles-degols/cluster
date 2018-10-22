@@ -1,7 +1,10 @@
 package net.degols.filesgate.libs.cluster.core
 
 import javax.inject.Singleton
+
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, WorkerActorHealth}
 import org.slf4j.{Logger, LoggerFactory}
+
 import scala.util.Random
 
 /**
@@ -60,4 +63,20 @@ class Cluster {
   }
 
   def nodes: List[Node] = _nodes
+
+  /**
+    * Reconstruct the structure of Cluster and its objects based on a given ClusterTopology.
+    */
+  def reconstructFromClusterTopology(clusterTopology: ClusterTopology): Unit = {
+    // Reconstruct every node
+    _nodes = List()
+
+    clusterTopology.workerActors.values.flatten.map(workerActorHealth => {
+      val rawNode = Node.fromNodeInfo(workerActorHealth.nodeInfo)
+      addNode(rawNode)
+    })
+
+    // For every node, we reconstruct the WorkerManagers
+    nodes.foreach(_.reconstructFromClusterTopology(clusterTopology))
+  }
 }

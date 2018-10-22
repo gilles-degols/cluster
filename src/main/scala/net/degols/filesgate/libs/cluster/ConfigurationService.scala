@@ -4,6 +4,7 @@ import java.io.File
 
 import com.google.inject.Inject
 import com.typesafe.config.{Config, ConfigFactory}
+import net.degols.filesgate.libs.cluster.Tools.runCommand
 import org.slf4j.LoggerFactory
 
 import collection.JavaConverters._
@@ -47,6 +48,15 @@ class ConfigurationService @Inject()(defaultConfig: Config) {
     * using the cluster library
     */
   val clusterConfig: Config = config.getConfig("cluster")
+
+  lazy val localHostname: String = Tools.runCommand("hostname")
+
+  /**
+    * A watcher might not receive any message back from an ElectionActor directly. Or we want to allow a nice switch
+    * of ElectionManagers without killing all Workers directly. During that time, we can have duplicate work, so the value
+    * should be correctly chosen. 1 minute should be more than enough.
+    */
+  val watcherTimeoutBeforeSuicide: FiniteDuration = config.getInt("cluster.watcher-timeout-before-suicide-ms") millis
 
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)

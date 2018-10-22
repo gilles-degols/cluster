@@ -1,8 +1,11 @@
 package net.degols.filesgate.libs.cluster.core
 
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo}
+
 
 /**
   * Every information related to a Node. If there are multiple JVMs running on the same server, they will be linked to the same Node.
+  * A WorkerManager is similar to a WorkerLeader. A workerManager != Manager
   */
 class Node(val hostname: String) {
   /**
@@ -39,4 +42,28 @@ class Node(val hostname: String) {
       case _ => false
     }
   override def hashCode: Int = s"Node:$hostname".hashCode
+
+
+  def reconstructFromClusterTopology(clusterTopology: ClusterTopology): Unit = {
+    _workerManagers = List.empty[WorkerManager]
+
+    clusterTopology.workerActors.values.flatten.filter(workerActorHealth => {
+      val rawNode = Node.fromNodeInfo(workerActorHealth.nodeInfo)
+      // We only keep WorkerManagers for the current node
+      rawNode == this
+    }).foreach(workerActorHealth => {
+      val rawWorkerManager = new WorkerManager(workerActorHealth.jvmId, workerActorHealth.workerLeader)
+      addWorkerManager(rawWorkerManager)
+    })
+
+    workerManagers.foreach(_.reconstructFromClusterTopology(clusterTopology))
+  }
+}
+
+object Node {
+  def fromNodeInfo(nodeInfo: NodeInfo): Node = {
+    val node = new Node(nodeInfo.networkHostname)
+    node.localHostname = nodeInfo.localHostname
+    node
+  }
 }

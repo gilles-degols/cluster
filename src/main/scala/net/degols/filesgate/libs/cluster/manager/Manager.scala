@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory
   * @param configurationService
   */
 @Singleton
-class Manager @Inject()(electionService: ElectionService, configurationService: ConfigurationService) extends ElectionWrapper(electionService, configurationService){
+final class Manager @Inject()(electionService: ElectionService, configurationService: ConfigurationService) extends ElectionWrapper(electionService, configurationService){
   private val logger = LoggerFactory.getLogger(getClass)
   private var _previousLeader: Option[ActorRef] = None
   private var _currentWorkerLeader: Option[ActorRef] = None
@@ -39,6 +39,7 @@ class Manager @Inject()(electionService: ElectionService, configurationService: 
           case None => logger.warn("The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
         }
       }
+
     case message =>
       logger.debug(s"[Manager] Received unknown message: $message")
   }

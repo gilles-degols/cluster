@@ -1,6 +1,7 @@
 package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.ActorRef
+import net.degols.filesgate.libs.cluster.messages.ClusterTopology
 
 /**
   * We could have multiple instances of WorkerManager running on the same machine. So the id is concatenation of
@@ -40,4 +41,8 @@ class WorkerManager(id: String, val actorRef: ActorRef) {
       case _ => false
     }
   override def hashCode: Int = s"WorkerManager:$id".hashCode
+
+  def reconstructFromClusterTopology(clusterTopology: ClusterTopology): Unit = {
+    // A CONTINUER !!!
+  }
 }

@@ -31,6 +31,9 @@ case object ClusterInstance extends InstanceType
   */
 @SerialVersionUID(10040L)
 case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, minimumInstances: Option[Int] = None, maximumInstances: Option[Int] = None, instanceType: InstanceType = ClusterInstance) extends ClusterRemoteMessage(actorRef){
+  // Automatically added by the WorkerLeader when it sends its info
+  var nodeInfo: NodeInfo = _
+
   override def toString: String = s"WorkerTypeInfo: $workerTypeId / $actorRef @ $creationDatetime"
 }
 
@@ -174,7 +177,8 @@ case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef)
   * Contain various information about a WorkerActor
   */
 @SerialVersionUID(10130L)
-case class WorkerActorHealth(actorRef: ActorRef, workerTypeId: String, workerActorRef: ActorRef) extends RemoteMessage(actorRef) {
+case class WorkerActorHealth(actorRef: ActorRef, workerTypeId: String, workerActorRef: ActorRef, nodeInfo: NodeInfo, jvmId: String, workerLeader: ActorRef) extends RemoteMessage(actorRef) {
+
   private var _clusterRemoteMessages: List[ClusterRemoteMessage] = List.empty[ClusterRemoteMessage]
 
   /**
@@ -255,4 +259,10 @@ case class BasicLoadBalancingType(instances: Int, instanceType: InstanceType = C
   */
 @SerialVersionUID(10170L)
 case class IPLoadBalancingType(ips: List[String], instanceType: InstanceType = ClusterInstance) extends LoadBalancingType
+
+/**
+  * Small information about the current node. Multiple JVMs could run on the same nodes.
+  */
+@SerialVersionUID(10180L)
+case class NodeInfo(networkHostname: String, localHostname: String)
 
