@@ -42,8 +42,8 @@ case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, minimumInsta
   * @param actorRef
   */
 @SerialVersionUID(10050L)
-case class StartWorkerActor(actorRef: ActorRef, workerTypeId: String) extends RemoteMessage(actorRef){
-  override def toString: String = s"StartWorkerActor: $workerTypeId / $actorRef @ $creationDatetime"
+case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String) extends RemoteMessage(actorRef){
+  override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId @ $creationDatetime"
 }
 
 /**
@@ -52,7 +52,7 @@ case class StartWorkerActor(actorRef: ActorRef, workerTypeId: String) extends Re
   */
 @SerialVersionUID(10060L)
 case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, runningActorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerTypeId} / $actorRef @ $creationDatetime"
+  override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / $actorRef @ $creationDatetime"
 }
 
 /**
@@ -63,7 +63,7 @@ case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerA
   */
 @SerialVersionUID(10070L)
 case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, exception: Exception) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeId} / $actorRef @ $creationDatetime"
+  override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / $actorRef @ $creationDatetime"
 }
 
 /**
@@ -177,7 +177,8 @@ case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef)
   * Contain various information about a WorkerActor
   */
 @SerialVersionUID(10130L)
-case class WorkerActorHealth(actorRef: ActorRef, workerTypeId: String, workerActorRef: ActorRef, nodeInfo: NodeInfo, jvmId: String, workerLeader: ActorRef) extends RemoteMessage(actorRef) {
+case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, jvmId: String, workerLeader: ActorRef, workerActorId: String) extends RemoteMessage(actorRef) {
+  def workerTypeId: String = workerTypeInfo.workerTypeId
 
   private var _clusterRemoteMessages: List[ClusterRemoteMessage] = List.empty[ClusterRemoteMessage]
 

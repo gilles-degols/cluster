@@ -1,13 +1,14 @@
 package net.degols.filesgate.libs.cluster.core
 
-import net.degols.filesgate.libs.cluster.messages.ClusterTopology
+import net.degols.filesgate.libs.cluster.Tools
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, InstanceType, NodeInfo, WorkerTypeInfo}
 
 /**
   * A WorkerType manages all worker instances of the same type as itself.
   *
   * @param id
   */
-class WorkerType(val id: String) {
+class WorkerType(val id: String, workerTypeInfo: WorkerTypeInfo) {
   private var _workers: List[Worker] = List.empty[Worker]
 
   def addWorker(rawWorker: Worker): Worker = {
@@ -42,13 +43,20 @@ class WorkerType(val id: String) {
       rawWorkerManager == currentWorkerManager
     }).filter(workerActorHealth => {
       // We only keep the current WorkerType
-      val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId)
+      val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId, workerActorHealth.workerTypeInfo)
       rawWorkerType == this
     }).foreach(workerActorHealth => {
-      val rawWorker = new Worker(workerActorHealth.workerActorRef)
+      val rawWorker = new Worker(workerActorHealth.workerActorId, Option(workerActorHealth.workerActorRef))
       addWorker(rawWorker)
     })
 
     // No need to go one step below, there is nothing to re-construct on the Worker level
+  }
+}
+
+object WorkerType {
+  def fromWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo): WorkerType = {
+    val workerType = new WorkerType(workerTypeInfo.workerTypeId, workerTypeInfo)
+    workerType
   }
 }

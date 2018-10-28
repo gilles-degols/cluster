@@ -2,7 +2,7 @@ package net.degols.filesgate.libs.cluster.balancing
 
 import akka.actor.ActorContext
 import net.degols.filesgate.libs.cluster.core.Cluster
-import net.degols.filesgate.libs.cluster.messages.ClusterTopology
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, StartedWorkerActor, WorkerTypeInfo}
 import org.slf4j.LoggerFactory
 
 /**
@@ -21,4 +21,32 @@ abstract class LoadBalancing(context: ActorContext, cluster: Cluster) {
     _clusterTopology = clusterTopology
     cluster.reconstructFromClusterTopology(clusterTopology)
   }
+
+  /**
+    * Every WorkerLeader sends its WorkerInfo from time to time. We have to store it (to know which JVM can start actors
+    * of a specific type and so on)
+    */
+  def registerWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo): Unit = {
+    cluster.registerWorkerTypeInfo(workerTypeInfo)
+    cluster.watchWorkerTypeInfo(context, workerTypeInfo)
+  }
+
+  /**
+    * When a WorkerActor is started, we want to save its status, and watch its actor.
+    * @param startedWorkerActor
+    */
+  def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
+    cluster.registerStartedWorkerActor(startedWorkerActor)
+    cluster.watchWorkerActor(context, startedWorkerActor)
+  }
+
+  /**
+    * Check every Node, WorkerType, etc. to be sure that we have the appropriate number of started actors.
+    * This method is called from time to time.
+    */
+  def distributeWorkers(): Unit = ???
+
+  /**
+    * Every time
+    */
 }

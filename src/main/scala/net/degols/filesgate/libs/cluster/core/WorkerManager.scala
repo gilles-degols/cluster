@@ -1,7 +1,7 @@
 package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.ActorRef
-import net.degols.filesgate.libs.cluster.messages.ClusterTopology
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, WorkerTypeInfo}
 
 /**
   * We could have multiple instances of WorkerManager running on the same machine. So the id is concatenation of
@@ -54,10 +54,17 @@ class WorkerManager(id: String, val actorRef: ActorRef) {
       val rawWorkerManager = new WorkerManager(workerActorHealth.jvmId, workerActorHealth.workerLeader)
       rawWorkerManager == this
     }).foreach(workerActorHealth => {
-      val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId)
+      val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId, workerActorHealth.workerTypeInfo)
       addWorkerType(rawWorkerType)
     })
 
     workerTypes.foreach(workerType => workerType.reconstructFromClusterTopology(clusterTopology, currentNode, this))
+  }
+}
+
+object WorkerManager {
+  def fromWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo): WorkerManager = {
+    val workerManager = new WorkerManager(workerTypeInfo.jvmId, workerTypeInfo.actorRef) // WorkerTypeInfo sent by WorkerLeader, so the actor ref is ok
+    workerManager
   }
 }

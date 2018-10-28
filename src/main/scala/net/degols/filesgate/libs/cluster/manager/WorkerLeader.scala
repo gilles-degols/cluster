@@ -90,13 +90,13 @@ abstract class WorkerLeader @Inject()(localManager: Manager, configurationServic
       case message: ClusterTopology =>
         Communication.setClusterTopology(message)
       case message: StartWorkerActor =>
-        Try{startWorker(message.workerTypeId)} match {
+        Try{startWorker(message.workerTypeInfo.workerTypeId)} match {
           case Success(res) =>
             // Setting a watcher can leads to failure if the actors just dies at that moment
             Try{context.watch(res)} match {
               case Success(s) =>
                 val jvmId = Tools.jvmIdFromActorRef(self)
-                val workerActorHealth = WorkerActorHealth(self, message.workerTypeId, res, nodeInfo, jvmId, self)
+                val workerActorHealth = WorkerActorHealth(self, message.workerTypeInfo, res, nodeInfo, jvmId, self, message.workerId)
                 jvmTopology.addWorkerActor(workerActorHealth)
                 message.actorRef ! StartedWorkerActor(self, message, res)
               case Failure(e) =>

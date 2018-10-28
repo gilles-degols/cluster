@@ -19,6 +19,11 @@ object Tools {
   def jvmIdFromActorRef(actorRef: ActorRef): String = remoteActorPath(actorRef).replace(".tcp","").replace(".udp","")
 
   /**
+    * Hash arbitrary string
+    */
+  def hash(text: String): String = text
+
+  /**
     * We don't care about the port, we just want the network hostname
     * @param actorRef
     * @return

@@ -2,10 +2,11 @@ package net.degols.filesgate.libs.cluster.core
 
 import javax.inject.Singleton
 
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, WorkerActorHealth}
+import akka.actor.{ActorContext, ActorRef}
+import net.degols.filesgate.libs.cluster.messages._
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
 /**
   * General interface to access information about the cluster
@@ -20,14 +21,69 @@ class Cluster {
   private var _nodes: List[Node] = List.empty[Node]
 
   /**
-    * When we receive an InstanceType, we need to save the related information locally, which include the related
+    * When we receive a WorkerTypeInfo, we store the information (if not already done), which include the related
     * node found (might be new), the InstanceTypeId, ...
     */
-  def registerInstanceType(rawNode: Node, rawWorkerManager: WorkerManager, rawWorkerType: WorkerType): Unit = {
+  def registerWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo): Unit = {
+    val rawNode = Node.fromNodeInfo(workerTypeInfo.nodeInfo)
+    val rawWorkerManager = WorkerManager.fromWorkerTypeInfo(workerTypeInfo)
+    val rawWorkerType = WorkerType.fromWorkerTypeInfo(workerTypeInfo)
     val node = addNode(rawNode)
-    val clusterInstance = node.addWorkerManager(rawWorkerManager)
-    clusterInstance.addWorkerType(rawWorkerType)
+    val workerManager = node.addWorkerManager(rawWorkerManager)
+    workerManager.addWorkerType(rawWorkerType)
   }
+
+  /**
+    * Every time we add a WorkerTypeInfo we probably want to watch the status of the various actors, to be notified
+    * when they die
+    * @param workerTypeInfo
+    */
+  def watchWorkerTypeInfo(context: ActorContext, workerTypeInfo: WorkerTypeInfo): Try[Unit] = {
+    // A watch can fail if the actor is failing just right now for example
+    // I don't know if watching multiple times is a problem
+    Try{
+      context.watch(workerTypeInfo.actorRef)
+    } match {
+      case Success(res) => Try{res}
+      case Failure(err) =>
+        logger.error(s"Impossible to watch a WorkerTypeInfo: $workerTypeInfo")
+        Try{err}
+    }
+  }
+
+  /**
+    * When a StartedWorkerActor is received, we want to update its status
+    * @param startedWorkerActor
+    */
+  def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
+    val worker = Cluster.getWorker(this, startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
+    worker.running = true
+  }
+
+  /**
+    * When a FailedWorkerActor is received, we want to update its status
+    * @param failedWorkerActor
+    */
+  def registerFailedWorkerActor(failedWorkerActor: FailedWorkerActor): Unit = {
+    val worker = Cluster.getWorker(this, failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
+    worker.running = true
+  }
+
+  /**
+    * Every time a WorkerActor is started we want to monitor it
+    * @param startedWorkerActor
+    */
+  def watchWorkerActor(context: ActorContext, startedWorkerActor: StartedWorkerActor): Try[Unit] = {
+    Try{
+      context.watch(startedWorkerActor.runningActorRef)
+    } match {
+      case Success(res) => Try{res}
+      case Failure(err) =>
+        logger.error(s"Impossible to watch a WorkerActor: $startedWorkerActor")
+        Try{err}
+    }
+  }
+
 
   /**
     * Find the best node to start an Instance. For now we just select one at random
@@ -78,5 +134,30 @@ class Cluster {
 
     // For every node, we reconstruct the WorkerManagers
     nodes.foreach(_.reconstructFromClusterTopology(clusterTopology))
+  }
+}
+
+object Cluster {
+  def getNode(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): Node = {
+    val rawNode = Node.fromNodeInfo(workerTypeInfo.nodeInfo)
+    cluster.addNode(rawNode)
+  }
+
+  def getWorkerManager(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): WorkerManager = {
+    val node = Cluster.getNode(cluster, workerTypeInfo)
+    val rawWorkerManager = WorkerManager.fromWorkerTypeInfo(workerTypeInfo)
+    node.addWorkerManager(rawWorkerManager)
+  }
+
+  def getWorkerType(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): WorkerType = {
+    val workerManager = Cluster.getWorkerManager(cluster, workerTypeInfo)
+    val rawWorkerType = WorkerType.fromWorkerTypeInfo(workerTypeInfo)
+    workerManager.addWorkerType(rawWorkerType)
+  }
+
+  def getWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo, workerId: String, workerActorRef: Option[ActorRef]): Worker = {
+    val workerType = Cluster.getWorkerType(cluster, workerTypeInfo)
+    val rawWorker = Worker.fromWorkerIdAndActorRef(workerId, workerActorRef)
+    workerType.addWorker(rawWorker)
   }
 }
