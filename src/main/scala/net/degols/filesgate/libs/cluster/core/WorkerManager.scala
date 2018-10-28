@@ -22,7 +22,7 @@ class WorkerManager(id: String, val actorRef: ActorRef) {
     */
   def addWorkerType(rawWorkerType: WorkerType): WorkerType = {
     _workerTypes.find(_ == rawWorkerType) match {
-      case Some(previousPipelineStep) => previousPipelineStep
+      case Some(previousWorkerType) => previousWorkerType
       case None =>
         _workerTypes = _workerTypes :+ rawWorkerType
         rawWorkerType
@@ -42,7 +42,22 @@ class WorkerManager(id: String, val actorRef: ActorRef) {
     }
   override def hashCode: Int = s"WorkerManager:$id".hashCode
 
-  def reconstructFromClusterTopology(clusterTopology: ClusterTopology): Unit = {
-    // A CONTINUER !!!
+  def reconstructFromClusterTopology(clusterTopology: ClusterTopology, currentNode: Node): Unit = {
+    _workerTypes = List.empty[WorkerType]
+
+    clusterTopology.workerActors.values.flatten.filter(workerActorHealth => {
+      val rawNode = Node.fromNodeInfo(workerActorHealth.nodeInfo)
+      // We only keep WorkerManagers for the current node
+      rawNode == currentNode
+    }).filter(workerActorHealth => {
+      // We only keep the current WorkerManager
+      val rawWorkerManager = new WorkerManager(workerActorHealth.jvmId, workerActorHealth.workerLeader)
+      rawWorkerManager == this
+    }).foreach(workerActorHealth => {
+      val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId)
+      addWorkerType(rawWorkerType)
+    })
+
+    workerTypes.foreach(workerType => workerType.reconstructFromClusterTopology(clusterTopology, currentNode, this))
   }
 }

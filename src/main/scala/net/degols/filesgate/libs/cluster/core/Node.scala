@@ -56,7 +56,7 @@ class Node(val hostname: String) {
       addWorkerManager(rawWorkerManager)
     })
 
-    workerManagers.foreach(_.reconstructFromClusterTopology(clusterTopology))
+    workerManagers.foreach(workerManager => workerManager.reconstructFromClusterTopology(clusterTopology, this))
   }
 }
 

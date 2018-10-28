@@ -1,7 +1,10 @@
 package net.degols.filesgate.libs.cluster.core
 
+import net.degols.filesgate.libs.cluster.messages.ClusterTopology
+
 /**
   * A WorkerType manages all worker instances of the same type as itself.
+  *
   * @param id
   */
 class WorkerType(val id: String) {
@@ -25,4 +28,27 @@ class WorkerType(val id: String) {
       case _ => false
     }
   override def hashCode: Int = s"WorkerType:$id".hashCode
+
+  def reconstructFromClusterTopology(clusterTopology: ClusterTopology, currentNode: Node, currentWorkerManager: WorkerManager): Unit = {
+    _workers = List.empty[Worker]
+
+    clusterTopology.workerActors.values.flatten.filter(workerActorHealth => {
+      val rawNode = Node.fromNodeInfo(workerActorHealth.nodeInfo)
+      // We only keep WorkerManagers for the current node
+      rawNode == currentNode
+    }).filter(workerActorHealth => {
+      // We only keep the current WorkerManager
+      val rawWorkerManager = new WorkerManager(workerActorHealth.jvmId, workerActorHealth.workerLeader)
+      rawWorkerManager == currentWorkerManager
+    }).filter(workerActorHealth => {
+      // We only keep the current WorkerType
+      val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId)
+      rawWorkerType == this
+    }).foreach(workerActorHealth => {
+      val rawWorker = new Worker(workerActorHealth.workerActorRef)
+      addWorker(rawWorker)
+    })
+
+    // No need to go one step below, there is nothing to re-construct on the Worker level
+  }
 }
