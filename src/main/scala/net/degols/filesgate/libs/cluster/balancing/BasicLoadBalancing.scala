@@ -5,8 +5,16 @@ import net.degols.filesgate.libs.cluster.messages.ClusterTopology
 import org.slf4j.LoggerFactory
 
 /**
-  * Created by Gilles.Degols on 22-10-18.
+  * Very basic load balancing: Simply try to create the expected number of actors, nothing more, nothing less. No real
+  * load balancing in fact.
   */
-class BasicLoadBalancing(context: ActorContext) extends LoadBalancing(context) {
+class BasicLoadBalancing extends LoadBalancing {
 
+  override def hardWorkDistribution(): Unit = {
+
+  }
+
+  override def softWorkDistribution(): Unit = {
+
+  }
 }

@@ -11,13 +11,10 @@ import collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Try
 
-object ConfigurationService {
-}
-
 /**
   * Created by Gilles.Degols on 03-09-18.
   */
-class ConfigurationService @Inject()(defaultConfig: Config) {
+class ClusterConfiguration @Inject()(defaultConfig: Config) {
   private val logger = LoggerFactory.getLogger(getClass)
   /**
     * If the library is loaded directly as a subproject, the Config of the subproject overrides the configuration of the main
@@ -57,6 +54,16 @@ class ConfigurationService @Inject()(defaultConfig: Config) {
     * should be correctly chosen. 1 minute should be more than enough.
     */
   val watcherTimeoutBeforeSuicide: FiniteDuration = config.getInt("cluster.watcher-timeout-before-suicide-ms") millis
+
+  /**
+    * A Soft Distribution message is sent frequently to start missing actors.
+    */
+  val softWorkDistributionFrequency: FiniteDuration = config.getInt("cluster.soft-work-distribution-ms") millis
+
+  /**
+    * A Hard Distribution message is sent from time to time to stop existing actors, and start them elsewhere.
+    */
+  val hardWorkDistributionFrequency: FiniteDuration = config.getInt("cluster.hard-work-distribution-ms") millis
 
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
