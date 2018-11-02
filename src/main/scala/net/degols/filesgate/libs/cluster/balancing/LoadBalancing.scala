@@ -1,6 +1,6 @@
 package net.degols.filesgate.libs.cluster.balancing
 
-import akka.actor.ActorContext
+import akka.actor.{ActorContext, ActorRef}
 import net.degols.filesgate.libs.cluster.core.Cluster
 import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, StartedWorkerActor, WorkerTypeInfo}
 import org.slf4j.LoggerFactory
@@ -47,6 +47,14 @@ abstract class LoadBalancing(context: ActorContext, cluster: Cluster) {
   def distributeWorkers(): Unit = ???
 
   /**
-    * Every time
+    * Every time we receive a Terminated() message from a watched actor, we need to remove it. We do not trigger a new
+    * balancing directly, as most of the time all the actors in one JVM will fail at the same time. That would trigger
+    * a lot of identical requests to re-distribute the workers. It is better to simply wait for the SoftWorkerDistribution
+    * message automatically sends every few seconds.
     */
+  def removeWatchedActor(actorRef: ActorRef): Unit = {
+    if(!cluster.registerFailedWorkerActor(actorRef)) {
+      cluster.registerFailedWorkerLeader(actorRef)
+    }
+  }
 }

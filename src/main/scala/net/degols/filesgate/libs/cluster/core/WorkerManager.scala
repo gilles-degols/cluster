@@ -10,7 +10,7 @@ import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, Wo
   *
   * @param id
   */
-class WorkerManager(id: String, val actorRef: ActorRef) {
+class WorkerManager(id: String, val actorRef: ActorRef) extends ClusterElement{
   /**
     * All pipeline steps of the running system
     */

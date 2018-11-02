@@ -56,8 +56,8 @@ class Cluster {
     * @param startedWorkerActor
     */
   def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
-    val worker = Cluster.getWorker(this, startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
-    worker.running = true
+    val worker = Cluster.getAndAddWorker(this, startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
+    worker.setStatus(ClusterElementRunning())
   }
 
   /**
@@ -65,8 +65,42 @@ class Cluster {
     * @param failedWorkerActor
     */
   def registerFailedWorkerActor(failedWorkerActor: FailedWorkerActor): Unit = {
-    val worker = Cluster.getWorker(this, failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
-    worker.running = true
+    val worker = Cluster.getAndAddWorker(this, failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
+    worker.setStatus(ClusterElementFailed(failedWorkerActor.exception))
+  }
+
+  /**
+    * Registered a failed WorkerActor, typically because of a Terminated message. Return True if the actor was found, false
+    * otherwise.
+    */
+  def registerFailedWorkerActor(actorRef: ActorRef): Boolean = {
+    val worker = Cluster.getWorker(this, actorRef)
+    worker match {
+      case Some(work) =>
+        work.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
+        true
+      case None =>
+        logger.debug("Failed ActorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        false
+    }
+  }
+
+  /**
+    * Registered a failed WorkerLeader, typically because of a Terminated message. Return True if the actor was found, false
+    * otherwise.
+    * By having a failed WorkerLeader, it means that the status of any object beneath it is unknown, but we will most likely
+    * also receive Terminated message and so on for each actor.
+    */
+  def registerFailedWorkerLeader(actorRef: ActorRef): Boolean = {
+    val workerLeader = Cluster.getWorkerManager(this, actorRef)
+    workerLeader match {
+      case Some(workLeader) =>
+        workLeader.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
+        true
+      case None =>
+        logger.debug("Failed ActorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        false
+    }
   }
 
   /**
@@ -84,6 +118,20 @@ class Cluster {
     }
   }
 
+  /**
+    * Every time a WorkerActor has failed we remove the monitoring
+    * @param actorRef
+    */
+  def unwatchWorkerActor(context: ActorContext, actorRef: ActorRef): Try[Unit] = {
+    Try{
+      context.unwatch(actorRef)
+    } match {
+      case Success(res) => Try{res}
+      case Failure(err) =>
+        logger.error(s"Impossible to unwatch the actorRef of a WorkerActor or WorkerLeader: $actorRef")
+        Try{err}
+    }
+  }
 
   /**
     * Find the best node to start an Instance. For now we just select one at random
@@ -138,26 +186,55 @@ class Cluster {
 }
 
 object Cluster {
-  def getNode(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): Node = {
+  def getAndAddNode(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): Node = {
     val rawNode = Node.fromNodeInfo(workerTypeInfo.nodeInfo)
     cluster.addNode(rawNode)
   }
 
-  def getWorkerManager(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): WorkerManager = {
-    val node = Cluster.getNode(cluster, workerTypeInfo)
+  def getNode(cluster: Cluster, actorRef: ActorRef): Option[Node] = {
+    // We go through each level, while keeping the top node between each step.
+    cluster.nodes.flatMap(node => node.workerManagers.map(workerManager => (node, workerManager)))
+      .flatMap(obj => obj._2.workerTypes.map(workerType => (obj._1, workerType)))
+      .flatMap(obj => obj._2.workers.map(worker => (obj._1, worker)))
+      .find(obj => obj._2.actorRef.isDefined && obj._2.actorRef.get == actorRef)
+      .map(_._1)
+  }
+
+  def getAndAddWorkerManager(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): WorkerManager = {
+    val node = Cluster.getAndAddNode(cluster, workerTypeInfo)
     val rawWorkerManager = WorkerManager.fromWorkerTypeInfo(workerTypeInfo)
     node.addWorkerManager(rawWorkerManager)
   }
 
-  def getWorkerType(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): WorkerType = {
-    val workerManager = Cluster.getWorkerManager(cluster, workerTypeInfo)
+  def getWorkerManager(cluster: Cluster, actorRef: ActorRef): Option[WorkerManager] = {
+    cluster.nodes.flatMap(_.workerManagers)
+      .flatMap(obj => obj.workerTypes.map(workerType => (obj, workerType)))
+      .flatMap(obj => obj._2.workers.map(worker => (obj._1, worker)))
+      .find(obj => obj._2.actorRef.isDefined && obj._2.actorRef.get == actorRef)
+      .map(_._1)
+  }
+
+  def getAndAddWorkerType(cluster: Cluster, workerTypeInfo: WorkerTypeInfo): WorkerType = {
+    val workerManager = Cluster.getAndAddWorkerManager(cluster, workerTypeInfo)
     val rawWorkerType = WorkerType.fromWorkerTypeInfo(workerTypeInfo)
     workerManager.addWorkerType(rawWorkerType)
   }
 
-  def getWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo, workerId: String, workerActorRef: Option[ActorRef]): Worker = {
-    val workerType = Cluster.getWorkerType(cluster, workerTypeInfo)
+  def getWorkerType(cluster: Cluster, actorRef: ActorRef): Option[WorkerType] = {
+    cluster.nodes.flatMap(_.workerManagers).flatMap(_.workerTypes)
+      .flatMap(obj => obj.workers.map(worker => (obj, worker)))
+      .find(obj => obj._2.actorRef.isDefined && obj._2.actorRef.get == actorRef)
+      .map(_._1)
+  }
+
+  def getAndAddWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo, workerId: String, workerActorRef: Option[ActorRef]): Worker = {
+    val workerType = Cluster.getAndAddWorkerType(cluster, workerTypeInfo)
     val rawWorker = Worker.fromWorkerIdAndActorRef(workerId, workerActorRef)
     workerType.addWorker(rawWorker)
+  }
+
+  def getWorker(cluster: Cluster, actorRef: ActorRef): Option[Worker] = {
+    cluster.nodes.flatMap(_.workerManagers).flatMap(_.workerTypes).flatMap(_.workers)
+      .find(worker => worker.actorRef.isDefined && worker.actorRef.get == actorRef)
   }
 }
