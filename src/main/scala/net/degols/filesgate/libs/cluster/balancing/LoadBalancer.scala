@@ -2,8 +2,8 @@ package net.degols.filesgate.libs.cluster.balancing
 
 import akka.actor.{ActorContext, ActorRef}
 import com.google.inject.Inject
-import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement}
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, StartedWorkerActor, WorkerTypeInfo}
+import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement, WorkerType}
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo}
 import org.slf4j.LoggerFactory
 
 /**
@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
   * To ease the extension of this class, some attributes are not automatically asked at creation. They are only set up
   * by the Manager.
   */
-abstract class LoadBalancing {
+abstract class LoadBalancer {
   private val logger = LoggerFactory.getLogger(getClass)
 
   // Set by the Manager
@@ -21,11 +21,16 @@ abstract class LoadBalancing {
   var clusterManagement: ClusterManagement = _
 
   /**
-    * Check every Node, WorkerType, etc. to be sure that we have the appropriate number of started actors.
+    * Return the related class LoadBalancerType this class is related to. Only a one-to-one relation
+    */
+  def isLoadBalancerType(loadBalancerType: LoadBalancerType): Boolean
+
+  /**
+    * Check a given WorkerType, etc. to be sure that we have the appropriate number of started actors for each WorkerManager
     * This method is called from time to time. The "soft" mode is called every few seconds to create missing actors, the "hard" mode
     * is called once every few minutes to optionnally stop actors in some JVMs and start them elsewhere.
     */
-  def softWorkDistribution(): Unit
+  def softWorkDistribution(workerType: WorkerType): Unit
 
-  def hardWorkDistribution(): Unit
+  def hardWorkDistribution(workerType: WorkerType): Unit
 }

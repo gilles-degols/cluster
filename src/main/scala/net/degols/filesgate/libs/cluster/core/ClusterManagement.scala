@@ -1,17 +1,18 @@
 package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
-import net.degols.filesgate.libs.cluster.balancing.LoadBalancing
+import net.degols.filesgate.libs.cluster.balancing.LoadBalancer
 import net.degols.filesgate.libs.cluster.core.Cluster
 import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, StartedWorkerActor, WorkerTypeInfo}
 import org.slf4j.LoggerFactory
 
 /**
   * Basic API to the Cluster class for internal use only. This avoid exposing too much the Cluster class.
-  * Typically, it handles everything from the reception of WorkerTypeInfo to start/stop of actors.
+  * Typically, it handles everything from the reception of WorkerTypeInfo to start/stop of actors. But it
+  * does not handle the load balancing in itself
   */
 @Singleton
-class ClusterManagement(context: ActorContext, cluster: Cluster, loadBalancing: LoadBalancing) {
+class ClusterManagement(context: ActorContext, val cluster: Cluster) {
   private val logger = LoggerFactory.getLogger(getClass)
 
   // If the manager is a follower, it will simply overrides this ClusterTopology based on what it receives from a leader

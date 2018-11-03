@@ -8,7 +8,7 @@ import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, InstanceType
   *
   * @param id
   */
-class WorkerType(val id: String, workerTypeInfo: WorkerTypeInfo) {
+class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
   private var _workers: List[Worker] = List.empty[Worker]
 
   def addWorker(rawWorker: Worker): Worker = {

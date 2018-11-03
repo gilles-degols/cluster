@@ -35,6 +35,7 @@ class Node(val hostname: String) {
   def workerManagers: List[WorkerManager] = _workerManagers
 
 
+
   def canEqual(a: Any): Boolean = a.isInstanceOf[Node]
   override def equals(that: Any): Boolean =
     that match {

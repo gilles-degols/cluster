@@ -4,7 +4,7 @@ import javax.inject.{Inject, Singleton}
 
 import akka.actor.{ActorRef, Cancellable}
 import net.degols.filesgate.libs.cluster.ClusterConfiguration
-import net.degols.filesgate.libs.cluster.balancing.LoadBalancing
+import net.degols.filesgate.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
 import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement}
 import net.degols.filesgate.libs.cluster.messages.{DistributeWork, IAmTheWorkerLeader}
 import net.degols.filesgate.libs.election._
@@ -16,11 +16,16 @@ import org.slf4j.LoggerFactory
   * overhead on the election system.
   * There is always one Manager instance per jvm, but if the jvm is not in the election configuration, it won't be
   * considered as taking part in the election, it will simply act as a watcher.
+  * We can provide multiple types of LoadBalancer
   * @param electionService
   * @param clusterConfiguration
   */
 @Singleton
-final class Manager @Inject()(electionService: ElectionService, clusterConfiguration: ClusterConfiguration, cluster: Cluster, loadBalancing: LoadBalancing) extends ElectionWrapper(electionService, configurationService){
+final class Manager @Inject()(electionService: ElectionService,
+                              configurationService: ConfigurationService,
+                              clusterConfiguration: ClusterConfiguration,
+                              cluster: Cluster)
+                    extends ElectionWrapper(electionService, configurationService){
   private val logger = LoggerFactory.getLogger(getClass)
   private var _previousLeader: Option[ActorRef] = None
   private var _currentWorkerLeader: Option[ActorRef] = None
@@ -32,14 +37,29 @@ final class Manager @Inject()(electionService: ElectionService, clusterConfigura
   private var _scheduleHardWork: Option[Cancellable] = None
 
   /**
-    * The clusterManagement and LoadBalancing should nothing by themselves to distribute work or so on. They should
-    * rely on automatic call to a limited number of methods once the
+    * The clusterManagement and LoadBalancer should nothing by themselves to distribute work or so on. They should
+    * rely on automatic calls to a limited number of methods
     */
-  protected var clusterManagement = new ClusterManagement(context, cluster, loadBalancing)
+  protected val clusterManagement = new ClusterManagement(context, cluster)
 
-  // To easily instantiate the LoadBalancing, some attributes are given manually here
-  loadBalancing.clusterManagement = clusterManagement
-  loadBalancing.context = context
+  /**
+    * Custom User LoadBalancer, they do not need to exist, it's just for advanced users
+    */
+  protected var userLoadBalancers: List[LoadBalancer] = List.empty[LoadBalancer]
+
+  /**
+    * All available load balancer.
+    */
+  private lazy val loadBalancers = {
+    val loadBalancers = List(new BasicLoadBalancer()) ++ userLoadBalancers
+
+    // To easily instantiate the LoadBalancer, some attributes are given manually here
+    loadBalancers.foreach(loadBalancer => {
+      loadBalancer.clusterManagement = clusterManagement
+      loadBalancer.context = context
+    })
+  }
+
 
   override def receive: Receive = {
     case IAmTheWorkerLeader =>
@@ -69,9 +89,9 @@ final class Manager @Inject()(electionService: ElectionService, clusterConfigura
       if(isLeader) { // There is no reason to distribute work if we are not leader
         logger.debug(s"Distribute workers (soft: $message)")
         if(message.soft) {
-          loadBalancing.softWorkDistribution()
+          loadBalancer.softWorkDistribution()
         } else {
-          loadBalancing.hardWorkDistribution()
+          loadBalancer.hardWorkDistribution()
         }
       }
 

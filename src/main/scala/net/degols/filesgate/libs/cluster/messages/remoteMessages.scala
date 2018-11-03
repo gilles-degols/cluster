@@ -22,15 +22,12 @@ case object ClusterInstance extends InstanceType
 
 /**
   * Message sent when the system is booting up. The WorkerLeader sent multiple WorkerTypeInfo indicating which actors
-  * it is able to start
+  * it is able to start. You need to provide the appropriate LoadBalancer information
   * @param actorRef
   * @param workerTypeId unique id of the WorkerActor to differentiate them
-  * @param minimumInstances minimum number of instances that we want of this workerType
-  * @param maximumInstances maximum number of instances that we want of this workerType
-  * @param instanceType is the number instances given for the cluster or current jvm?
   */
 @SerialVersionUID(10040L)
-case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, minimumInstances: Option[Int] = None, maximumInstances: Option[Int] = None, instanceType: InstanceType = ClusterInstance) extends ClusterRemoteMessage(actorRef){
+case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType) extends ClusterRemoteMessage(actorRef){
   // Automatically added by the WorkerLeader when it sends its info
   var nodeInfo: NodeInfo = _
 
@@ -242,7 +239,7 @@ case class ClusterTopology(actorRef: ActorRef) extends WorkerActorTopology(actor
   * must be reachable by any JVM. The message needs to be serializable, but the implementation does not need to be necessarily.
   */
 @SerialVersionUID(10150L)
-trait LoadBalancingType extends SimpleRemoteMessage{}
+trait LoadBalancerType extends SimpleRemoteMessage{}
 
 /**
   * Basic load balancing: start the number of asked instances, no more, no less.
@@ -250,7 +247,7 @@ trait LoadBalancingType extends SimpleRemoteMessage{}
   * @param instanceType
   */
 @SerialVersionUID(10160L)
-case class BasicLoadBalancingType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancingType
+case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancerType
 
 /**
   * Load balancing where we want to use multiple ips (for example, we have multiple servers and each server has 1 or more
@@ -259,7 +256,7 @@ case class BasicLoadBalancingType(instances: Int, instanceType: InstanceType = C
   * @param instanceType
   */
 @SerialVersionUID(10170L)
-case class IPLoadBalancingType(ips: List[String], instanceType: InstanceType = ClusterInstance) extends LoadBalancingType
+case class IPLoadBalancerType(ips: List[String], instanceType: InstanceType = ClusterInstance) extends LoadBalancerType
 
 /**
   * Small information about the current node. Multiple JVMs could run on the same nodes.

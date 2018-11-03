@@ -152,6 +152,10 @@ class Cluster {
       .groupBy(_._2).map(raw => raw._1 -> raw._2.map(_._1))
   }
 
+  def nodesForWorkerType(workerType: WorkerType): List[Node] = {
+    nodesByWorkerType().getOrElse(workerType, List.empty[Node])
+  }
+
   /**
     * Add a Node we received from another JVM, only if not already present. Return the inserted Node, or the previously
     * existing node
