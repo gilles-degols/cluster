@@ -11,9 +11,14 @@ import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, InstanceType
 class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
   private var _workers: List[Worker] = List.empty[Worker]
 
-  def addWorker(rawWorker: Worker): Worker = {
+  def addWorker(rawWorker: Worker, replace: Boolean = false): Worker = {
     _workers.find(_ == rawWorker) match {
-      case Some(previousWorker) => previousWorker
+      case Some(previousWorker) =>
+        if(replace) {
+          _workers = _workers.filterNot(_ == rawWorker) :+ rawWorker // Even if the objects are "equal" they can share differences in their attributes
+        } else {
+          previousWorker
+        }
       case None =>
         _workers = _workers :+ rawWorker
         rawWorker

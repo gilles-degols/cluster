@@ -2,7 +2,10 @@ package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.ActorRef
 import net.degols.filesgate.libs.cluster.messages.WorkerTypeInfo
+import net.degols.filesgate.libs.election.Tools
 import org.joda.time.DateTime
+
+import scala.util.Random
 
 /**
   * One instance of a WorkerType. Their number can grow up to any number, it will depend on the load of the system.
@@ -25,5 +28,19 @@ object Worker {
   def fromWorkerIdAndActorRef(workerId: String, actorRef: Option[ActorRef]): Worker = {
     val worker = new Worker(workerId, actorRef)
     worker
+  }
+
+  var workerNumber: Long = 0L
+  val rand = Random
+
+  def generateWorkerId(workerTypeInfo: WorkerTypeInfo): String = {
+    // Some random just in case
+    val salt = rand.nextInt(1000)
+
+    // This is not a major problem if there is a concurrent access, just prettier to have incremental number
+    synchronized {
+      workerNumber += 1
+      s"${workerTypeInfo.workerTypeId}-$workerNumber-$salt"
+    }
   }
 }

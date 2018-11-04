@@ -10,6 +10,8 @@ import net.degols.filesgate.libs.cluster.messages.{DistributeWork, IAmTheWorkerL
 import net.degols.filesgate.libs.election._
 import org.slf4j.LoggerFactory
 
+import scala.util.{Failure, Success, Try}
+
 /**
   * Handle the cluster in itself. We should only have a limited number of available Watchers as the election process
   * is planned for 3 nodes (maybe 5), not much more. The other nodes can act as followers to the Manager without any
@@ -48,7 +50,7 @@ final class Manager @Inject()(electionService: ElectionService,
   protected var userLoadBalancers: List[LoadBalancer] = List.empty[LoadBalancer]
 
   /**
-    * All available load balancer.
+    * All available load balancers, the one proposed by default + the user one.
     */
   private lazy val loadBalancers = {
     val loadBalancers = List(new BasicLoadBalancer()) ++ userLoadBalancers
@@ -58,6 +60,8 @@ final class Manager @Inject()(electionService: ElectionService,
       loadBalancer.clusterManagement = clusterManagement
       loadBalancer.context = context
     })
+
+    loadBalancers
   }
 
 
@@ -88,11 +92,24 @@ final class Manager @Inject()(electionService: ElectionService,
     case message: DistributeWork =>
       if(isLeader) { // There is no reason to distribute work if we are not leader
         logger.debug(s"Distribute workers (soft: $message)")
-        if(message.soft) {
-          loadBalancer.softWorkDistribution()
-        } else {
-          loadBalancer.hardWorkDistribution()
-        }
+        // For each WorkerType we need to find the appropriate load balancer, then ask him to do the work distribution
+        cluster.nodesByWorkerType().keys.foreach(workerType => {
+          loadBalancers.find(_.isLoadBalancerType(workerType.workerTypeInfo.loadBalancerType)) match {
+            case Some(loadBal) =>
+              Try{
+                if(message.soft) {
+                  loadBal.softWorkDistribution(workerType)
+                } else {
+                  loadBal.hardWorkDistribution(workerType)
+                }
+              } match {
+                case Success(res) => // Nothing to do
+                case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of ${workerType}: ${Tools.stacktraceToString(err)}")
+              }
+            case None =>
+              logger.error(s"There is no loadBalancer accepting the type ${workerType.workerTypeInfo.loadBalancerType}!")
+          }
+        })
       }
 
     case message =>

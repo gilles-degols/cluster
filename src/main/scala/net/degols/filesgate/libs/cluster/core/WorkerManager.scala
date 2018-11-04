@@ -1,7 +1,10 @@
 package net.degols.filesgate.libs.cluster.core
 
-import akka.actor.ActorRef
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, WorkerTypeInfo}
+import akka.actor.{ActorContext, ActorRef}
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo}
+import org.slf4j.{Logger, LoggerFactory}
+
+import scala.util.{Failure, Success, Try}
 
 /**
   * We could have multiple instances of WorkerManager running on the same machine. So the id is concatenation of
@@ -11,6 +14,8 @@ import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, Wo
   * @param id
   */
 class WorkerManager(id: String, val actorRef: ActorRef) extends ClusterElement{
+  private val logger: Logger = LoggerFactory.getLogger(getClass)
+
   /**
     * All pipeline steps of the running system
     */
@@ -26,6 +31,29 @@ class WorkerManager(id: String, val actorRef: ActorRef) extends ClusterElement{
       case None =>
         _workerTypes = _workerTypes :+ rawWorkerType
         rawWorkerType
+    }
+  }
+
+  /**
+    * Ask the distant actor to launch a specific instance of given WorkerType. This communication is async but we create
+    * a related Worker locally to remember that we just ask for it to launch
+    */
+  def startWorker(context: ActorContext, workerType: WorkerType): Unit = {
+    val properWorkerType = workerTypes.find(_ == workerType) match {
+      case None => logger.error(s"No WorkerType $workerType found in $this. Not possible to start worker.")
+      case Some(w) =>
+        val workerId = Worker.generateWorkerId(workerType.workerTypeInfo)
+        Try {
+          actorRef ! StartWorkerActor(context.self, workerType.workerTypeInfo, workerId)
+        } match {
+          case Success(res) =>
+            // We still don't know if the actor is correctly started or not, but we must avoid creating a new one for the next soft distribution.
+            val worker = Worker.fromWorkerIdAndActorRef(workerId, None)
+            worker.setStatus(ClusterElementStarting())
+            w.addWorker(worker)
+          case Failure(err) =>
+            logger.warn(s"Impossible to send a StartWorkerActor to $this for WorkerType: ${workerType}")
+        }
     }
   }
 

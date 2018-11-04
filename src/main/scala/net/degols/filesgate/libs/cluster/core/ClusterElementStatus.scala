@@ -10,6 +10,7 @@ trait ClusterElementStatus{
 }
 
 case class ClusterElementRunning() extends ClusterElementStatus()
+case class ClusterElementStarting() extends ClusterElementStatus() // No acknowledgment received yet
 abstract class ClusterElementStopped() extends ClusterElementStatus()
 // Special state when we don't really know the status. This is a temporary state when we have just created an object.
 case class ClusterElementUnknown() extends ClusterElementStopped()
