@@ -4,7 +4,10 @@ import akka.actor.{ActorContext, ActorRef}
 import net.degols.filesgate.libs.cluster.balancing.LoadBalancer
 import net.degols.filesgate.libs.cluster.core.Cluster
 import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, StartedWorkerActor, WorkerTypeInfo}
+import net.degols.filesgate.libs.election.Tools
 import org.slf4j.LoggerFactory
+
+import scala.util.{Failure, Success, Try}
 
 /**
   * Basic API to the Cluster class for internal use only. This avoid exposing too much the Cluster class.
@@ -41,6 +44,31 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
   def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
     cluster.registerStartedWorkerActor(startedWorkerActor)
     cluster.watchWorkerActor(context, startedWorkerActor)
+  }
+
+  def cleanOldWorkers(): Unit = {
+    cluster.cleanOldWorkers()
+  }
+
+  def distributeWorkers(loadBalancers: List[LoadBalancer], softDistribution: Boolean): Unit = {
+    // For each WorkerType we need to find the appropriate load balancer, then ask him to do the work distribution
+    cluster.nodesByWorkerType().keys.foreach(workerType => {
+      loadBalancers.find(_.isLoadBalancerType(workerType.workerTypeInfo.loadBalancerType)) match {
+        case Some(loadBal) =>
+          Try{
+            if(softDistribution) {
+              loadBal.softWorkDistribution(workerType)
+            } else {
+              loadBal.hardWorkDistribution(workerType)
+            }
+          } match {
+            case Success(res) => // Nothing to do
+            case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of ${workerType}: ${Tools.stacktraceToString(err)}")
+          }
+        case None =>
+          logger.error(s"There is no loadBalancer accepting the type ${workerType.workerTypeInfo.loadBalancerType}!")
+      }
+    })
   }
 
   /**

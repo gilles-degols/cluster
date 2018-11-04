@@ -11,6 +11,18 @@ import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, InstanceType
 class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
   private var _workers: List[Worker] = List.empty[Worker]
 
+  /**
+    * Remove any worker not put as "running" after x seconds, also remove the "failed" workers.
+    * New workers will be automatically started by another method, we don't deal with that here. This is generally called
+    * by the Cluster only (to avoid any external call from a developer).
+    */
+  private[core] def cleanOldWorkers(timeout: Long): Unit = {
+    // Remove failed workers (not the "paused" one)
+    _workers = _workers.filterNot(worker => worker.isFailed)
+    // Remove worker stucked in the "started" state for too long
+    _workers = _workers.filterNot(worker => worker.isStarting && Math.abs(Tools.difference(worker.status.creationDatetime)) > timeout)
+  }
+
   def addWorker(rawWorker: Worker, replace: Boolean = false): Worker = {
     _workers.find(_ == rawWorker) match {
       case Some(previousWorker) =>

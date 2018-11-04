@@ -40,9 +40,9 @@ class BasicLoadBalancer extends LoadBalancer {
   private def softWorkDistributionPerJVM(workerType: WorkerType, nodes: List[Node], balancerType: BasicLoadBalancerType): Unit = {
     val wantedInstances = balancerType.instances
 
-    nodes.flatMap(_.workerManagers.filterNot(_.isStopped))
+    nodes.flatMap(_.workerManagers.filter(_.isUp))
       .foreach(workerManager => {
-        val runningInstances = workerManager.workerTypes.find(_ == workerType).get.workers.filterNot(_.isStopped)
+        val runningInstances = workerManager.workerTypes.find(_ == workerType).get.workers.filter(_.isUp)
 
         var i = runningInstances.size
         if(i < wantedInstances) {
@@ -58,8 +58,8 @@ class BasicLoadBalancer extends LoadBalancer {
   private def softWorkDistributionPerCluster(workerType: WorkerType, nodes: List[Node], balancerType: BasicLoadBalancerType): Unit = {
     val wantedInstances = balancerType.instances
 
-    val managerAndRunningInstances: Map[WorkerManager, List[Worker]] = nodes.flatMap(node => node.workerManagers.filterNot(_.isStopped))
-      .map(workerManager => workerManager -> workerManager.workerTypes.filter(_ == workerType).flatMap(_.workers.filterNot(_.isStopped))).toMap
+    val managerAndRunningInstances: Map[WorkerManager, List[Worker]] = nodes.flatMap(node => node.workerManagers.filter(_.isUp))
+      .map(workerManager => workerManager -> workerManager.workerTypes.filter(_ == workerType).flatMap(_.workers.filter(_.isUp))).toMap
     val runningInstances = managerAndRunningInstances.values.flatten.size
     if(managerAndRunningInstances.keys.isEmpty) {
       logger.warn(s"There is no WorkerManager available for $workerType, not possible to start the missing ${wantedInstances - wantedInstances} instances.")

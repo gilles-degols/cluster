@@ -10,6 +10,8 @@ import sys.process._
 object Tools {
   def datetime(): DateTime = new DateTime().withZone(DateTimeZone.UTC)
 
+  def difference(otherDatetime: DateTime): Long = otherDatetime.getMillis - datetime().getMillis
+
   /**
     * Return the full path to a given actor ref
     * @param actorRef

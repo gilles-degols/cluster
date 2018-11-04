@@ -6,7 +6,7 @@ import akka.actor.{ActorRef, Cancellable}
 import net.degols.filesgate.libs.cluster.ClusterConfiguration
 import net.degols.filesgate.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
 import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement}
-import net.degols.filesgate.libs.cluster.messages.{DistributeWork, IAmTheWorkerLeader}
+import net.degols.filesgate.libs.cluster.messages.{CleanOldWorkers, DistributeWork, IAmTheWorkerLeader}
 import net.degols.filesgate.libs.election._
 import org.slf4j.LoggerFactory
 
@@ -37,6 +37,7 @@ final class Manager @Inject()(electionService: ElectionService,
     */
   private var _scheduleSoftWork: Option[Cancellable] = None
   private var _scheduleHardWork: Option[Cancellable] = None
+  private var _scheduleCleaning: Option[Cancellable] = None
 
   /**
     * The clusterManagement and LoadBalancer should nothing by themselves to distribute work or so on. They should
@@ -92,26 +93,13 @@ final class Manager @Inject()(electionService: ElectionService,
     case message: DistributeWork =>
       if(isLeader) { // There is no reason to distribute work if we are not leader
         logger.debug(s"Distribute workers (soft: $message)")
-        // For each WorkerType we need to find the appropriate load balancer, then ask him to do the work distribution
-        cluster.nodesByWorkerType().keys.foreach(workerType => {
-          loadBalancers.find(_.isLoadBalancerType(workerType.workerTypeInfo.loadBalancerType)) match {
-            case Some(loadBal) =>
-              Try{
-                if(message.soft) {
-                  loadBal.softWorkDistribution(workerType)
-                } else {
-                  loadBal.hardWorkDistribution(workerType)
-                }
-              } match {
-                case Success(res) => // Nothing to do
-                case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of ${workerType}: ${Tools.stacktraceToString(err)}")
-              }
-            case None =>
-              logger.error(s"There is no loadBalancer accepting the type ${workerType.workerTypeInfo.loadBalancerType}!")
-          }
-        })
+        clusterManagement.distributeWorkers(loadBalancers, message.soft)
       }
 
+    case message: CleanOldWorkers =>
+      if(isLeader){
+        logger.debug("Clean old workers")
+      }
     case message =>
       logger.debug(s"[Manager] Received unknown message: $message")
   }
@@ -119,6 +107,7 @@ final class Manager @Inject()(electionService: ElectionService,
   private def scheduleWorkDistribution(): Unit = {
     _scheduleSoftWork = Option(context.system.scheduler.schedule(clusterConfiguration.softWorkDistributionFrequency, clusterConfiguration.softWorkDistributionFrequency, self, DistributeWork(true)))
     _scheduleHardWork = Option(context.system.scheduler.schedule(clusterConfiguration.hardWorkDistributionFrequency, clusterConfiguration.hardWorkDistributionFrequency, self, DistributeWork(false)))
+    _scheduleCleaning = Option(context.system.scheduler.schedule(clusterConfiguration.startWorkerTimeout, clusterConfiguration.startWorkerTimeout, self, CleanOldWorkers()))
   }
 
   private def unscheduleWorkDistribution(): Unit = {
@@ -127,6 +116,10 @@ final class Manager @Inject()(electionService: ElectionService,
       case None =>
     }
     _scheduleHardWork match {
+      case Some(s) => s.cancel()
+      case None =>
+    }
+    _scheduleCleaning match {
       case Some(s) => s.cancel()
       case None =>
     }

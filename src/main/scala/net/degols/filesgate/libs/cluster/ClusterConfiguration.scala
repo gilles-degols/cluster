@@ -66,6 +66,11 @@ class ClusterConfiguration @Inject()(defaultConfig: Config) {
   val hardWorkDistributionFrequency: FiniteDuration = config.getInt("cluster.hard-work-distribution-ms") millis
 
   /**
+    * How much time do we allow to start a WorkerOrder before considering as failing?
+    */
+  val startWorkerTimeout: FiniteDuration = config.getInt("cluster.start-worker-timeout-ms") millis
+
+  /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
     */
   private def getStringList(path: String): List[String] = {

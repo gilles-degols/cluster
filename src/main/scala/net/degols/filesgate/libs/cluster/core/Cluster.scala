@@ -3,6 +3,8 @@ package net.degols.filesgate.libs.cluster.core
 import javax.inject.Singleton
 
 import akka.actor.{ActorContext, ActorRef}
+import com.google.inject.Inject
+import net.degols.filesgate.libs.cluster.ClusterConfiguration
 import net.degols.filesgate.libs.cluster.messages._
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -12,7 +14,7 @@ import scala.util.{Failure, Random, Success, Try}
   * General interface to access information about the cluster
   */
 @Singleton
-class Cluster {
+class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   /**
@@ -154,6 +156,15 @@ class Cluster {
 
   def nodesForWorkerType(workerType: WorkerType): List[Node] = {
     nodesByWorkerType().getOrElse(workerType, List.empty[Node])
+  }
+
+  /**
+    * Remove any worker not put as "running" after x seconds, also remove the "failed" workers.
+    * New workers will be automatically started by another method, we don't deal with that here.
+    */
+  def cleanOldWorkers(): Unit = {
+    val timeout = clusterConfiguration.startWorkerTimeout.toMillis
+    nodes.flatMap(_.workerManagers).flatMap(_.workerTypes).foreach(_.cleanOldWorkers(timeout))
   }
 
   /**

@@ -17,5 +17,5 @@ case class ClusterElementUnknown() extends ClusterElementStopped()
 
 
 case class ClusterElementFailed(exception: Exception) extends ClusterElementStopped()
-case class ClusterElementPaused() extends ClusterElementStopped()
+case class ClusterElementPaused() extends ClusterElementStopped() // A Paused worker can be restarted afterwards
 
