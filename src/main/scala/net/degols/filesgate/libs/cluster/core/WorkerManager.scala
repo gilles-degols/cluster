@@ -62,6 +62,12 @@ class WorkerManager(id: String, val actorRef: ActorRef) extends ClusterElement{
     */
   def workerTypes: List[WorkerType] = _workerTypes
 
+  /**
+    * The port should normally be unique on the same node
+    * @return
+    */
+  def port: String = actorRef.toString().split("/")(2).split(":").last
+
   def canEqual(a: Any): Boolean = a.isInstanceOf[WorkerManager]
   override def equals(that: Any): Boolean =
     that match {

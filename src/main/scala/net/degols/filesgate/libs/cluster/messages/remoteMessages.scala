@@ -247,7 +247,12 @@ trait LoadBalancerType extends SimpleRemoteMessage{}
   * @param instanceType
   */
 @SerialVersionUID(10160L)
-case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancerType
+case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancerType {
+  override def toString: String = {
+    val location = if(instanceType == JVMInstance) "jvm" else "cluster"
+    s"BasicLoadBalancer: $instances instances/$location"
+  }
+}
 
 /**
   * Load balancing where we want to use multiple ips (for example, we have multiple servers and each server has 1 or more

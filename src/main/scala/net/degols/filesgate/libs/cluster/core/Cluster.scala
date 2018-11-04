@@ -198,6 +198,22 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     // For every node, we reconstruct the WorkerManagers
     nodes.foreach(_.reconstructFromClusterTopology(clusterTopology))
   }
+
+  override def toString: String = {
+    nodes.flatMap(node => {
+      val nodeText: String = s"Node: ${node.hostname}"
+      node.workerManagers.map(workerManager => {
+        val workerManagerText: String = s"$nodeText - port: ${workerManager.port}"
+        val workerTypeTexts: String = workerManager.workerTypes.map(workerType => {
+          val workerTypeText: String = s"\t${workerType.id} - ${workerType.workerTypeInfo.loadBalancerType}:"
+          val workerTexts = workerType.workers.map(worker => worker.status.toString).groupBy(status => status).map(status => s"${status._1}: ${status._2.size}").mkString(", ")
+          s"$workerTypeText $workerTexts"
+        }).mkString("\n")
+
+        s"$workerManagerText\n$workerTypeTexts"
+      }).mkString("\n")
+    }).mkString("")
+  }
 }
 
 object Cluster {
@@ -252,4 +268,5 @@ object Cluster {
     cluster.nodes.flatMap(_.workerManagers).flatMap(_.workerTypes).flatMap(_.workers)
       .find(worker => worker.actorRef.isDefined && worker.actorRef.get == actorRef)
   }
+
 }
