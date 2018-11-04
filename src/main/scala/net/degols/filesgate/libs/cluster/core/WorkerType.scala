@@ -27,7 +27,8 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
     _workers.find(_ == rawWorker) match {
       case Some(previousWorker) =>
         if(replace) {
-          _workers = _workers.filterNot(_ == rawWorker) :+ rawWorker // Even if the objects are "equal" they can share differences in their attributes
+          _workers = _workers.filterNot(_ == previousWorker) :+ rawWorker // Even if the objects are "equal" they can share differences in their attributes
+          rawWorker
         } else {
           previousWorker
         }

@@ -9,7 +9,7 @@ import org.joda.time.DateTime
 /**
   * Every RemoteMessage of this library should extend this class to easily manage them
   */
-trait ClusterRemoteMessage extends RemoteMessage
+class ClusterRemoteMessage(actorRef: ActorRef) extends RemoteMessage(actorRef)
 
 @SerialVersionUID(10010L)
 sealed trait InstanceType
@@ -23,7 +23,7 @@ case object ClusterInstance extends InstanceType
 /**
   * Message sent when the system is booting up. The WorkerLeader sent multiple WorkerTypeInfo indicating which actors
   * it is able to start. You need to provide the appropriate LoadBalancer information
-  * @param actorRef
+  * @param actorRef the one from the current WorkerLeader
   * @param workerTypeId unique id of the WorkerActor to differentiate them
   */
 @SerialVersionUID(10040L)
@@ -39,7 +39,7 @@ case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancer
   * @param actorRef
   */
 @SerialVersionUID(10050L)
-case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String) extends RemoteMessage(actorRef){
+case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String) extends ClusterRemoteMessage(actorRef){
   override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId @ $creationDatetime"
 }
 
@@ -115,7 +115,7 @@ case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(ac
   * Manager can request information about all actors of the current WorkerLeader to reconstruct its topology.
   */
 @SerialVersionUID(10110L)
-case class RequestWorkerActorTopology(actorRef: ActorRef) extends RemoteMessage(actorRef) {
+case class RequestWorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef) {
   override def toString: String = s"RequestWorkerActorTopology: $actorRef @ $creationDatetime"
 }
 
@@ -123,7 +123,7 @@ case class RequestWorkerActorTopology(actorRef: ActorRef) extends RemoteMessage(
   * Abstract class used for jvm and cluster topology
   */
 @SerialVersionUID(10180L)
-abstract class WorkerActorTopology(actorRef: ActorRef) extends RemoteMessage(actorRef){
+abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   // List of running workers (workerTypeId -> workerActorHealth).
   var workerActors: Map[String, List[WorkerActorHealth]] = Map.empty[String, List[WorkerActorHealth]]
 
@@ -174,7 +174,7 @@ case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef)
   * Contain various information about a WorkerActor
   */
 @SerialVersionUID(10130L)
-case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, jvmId: String, workerLeader: ActorRef, workerActorId: String) extends RemoteMessage(actorRef) {
+case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, workerLeader: ActorRef, workerActorId: String) extends ClusterRemoteMessage(actorRef) {
   def workerTypeId: String = workerTypeInfo.workerTypeId
 
   private var _clusterRemoteMessages: List[ClusterRemoteMessage] = List.empty[ClusterRemoteMessage]

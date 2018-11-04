@@ -2,11 +2,11 @@ package net.degols.filesgate.libs.cluster.manager
 
 import javax.inject.{Inject, Singleton}
 
-import akka.actor.{ActorRef, Cancellable}
+import akka.actor.{ActorRef, Cancellable, Terminated}
 import net.degols.filesgate.libs.cluster.ClusterConfiguration
 import net.degols.filesgate.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
 import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement}
-import net.degols.filesgate.libs.cluster.messages.{CleanOldWorkers, DistributeWork, IAmTheWorkerLeader}
+import net.degols.filesgate.libs.cluster.messages._
 import net.degols.filesgate.libs.election._
 import org.slf4j.LoggerFactory
 
@@ -99,9 +99,30 @@ final class Manager @Inject()(electionService: ElectionService,
     case message: CleanOldWorkers =>
       if(isLeader){
         logger.debug("Clean old workers")
+        clusterManagement.cleanOldWorkers()
       }
+
+    case message: ClusterRemoteMessage =>
+      if(isLeader) {
+        handleClusterMessage(message)
+      }
+
+    case message: Terminated =>
+      logger.warn(s"[Manager] Received a Terminated message from ${message.actor}")
+      clusterManagement.removeWatchedActor(message.actor)
+
     case message =>
       logger.debug(s"[Manager] Received unknown message: $message")
+  }
+
+  def handleClusterMessage(rawMessage: ClusterRemoteMessage): Unit = {
+    rawMessage match {
+      case message: WorkerTypeInfo => clusterManagement.registerWorkerTypeInfo(message)
+      case message: StartedWorkerActor => clusterManagement.registerStartedWorkerActor(message)
+      case message: FailedWorkerActor => clusterManagement.registerFailedWorkerActor(message)
+      case other =>
+        logger.error(s"Received unknown ClusterRemoteMessage: $rawMessage")
+    }
   }
 
   private def scheduleWorkDistribution(): Unit = {

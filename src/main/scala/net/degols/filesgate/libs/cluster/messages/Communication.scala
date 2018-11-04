@@ -2,6 +2,7 @@ package net.degols.filesgate.libs.cluster.messages
 
 import akka.actor.ActorRef
 import akka.pattern.ask
+import akka.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.duration._
@@ -15,6 +16,10 @@ object Communication {
 
   private var _clusterTopology: Option[ClusterTopology] = None
 
+  private var _askTimeoutSecond: Int = 0
+
+  def setAskTimeoutSecond(value: Int): Unit = if(value > 0) _askTimeoutSecond = value else throw new Exception("Value out of range")
+
   /**
     * Number of retries to execute if a message could not be sent
     */
@@ -24,7 +29,7 @@ object Communication {
 
   def setClusterTopology(clusterTopology: ClusterTopology): Unit = _clusterTopology = Option(clusterTopology)
 
-  def sendWithReply(sender: ActorRef, workerTypeId: String, message: Any, timeoutSecond: Int = 10): Try[RemoteReply] = Try {
+  def sendWithReply(sender: ActorRef, workerTypeId: String, message: Any): Try[RemoteReply] = Try {
     var attempt = 0
     var result: Try[RemoteReply] = Failure(new Exception("Method not called"))
     while(attempt < _maxRetries) {
@@ -39,7 +44,7 @@ object Communication {
       if(actorRefs.nonEmpty) {
         // Simply take one at random. If we want to do smarter load balancing, you need to handle it yourselves
         val actorRef = Random.shuffle(actorRefs).head
-        result = internalSendWithReply(sender, actorRef, message, timeoutSecond)
+        result = internalSendWithReply(sender, actorRef, message, _askTimeoutSecond)
         if(result.isSuccess) {
           return result
         }
@@ -53,15 +58,13 @@ object Communication {
     }
 
     result.get
-
-
   }
 
-  def sendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any, timeoutSecond: Int = 10): Try[RemoteReply] = Try{
+  def sendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any): Try[RemoteReply] = Try{
     var attempt = 0
     var result: Try[RemoteReply] = Failure(new Exception("Method not called"))
     while(attempt < _maxRetries) {
-      result = internalSendWithReply(sender, actorRef, message, timeoutSecond)
+      result = internalSendWithReply(sender, actorRef, message, _askTimeoutSecond)
       if(result.isSuccess) {
         return result
       }
@@ -79,8 +82,9 @@ object Communication {
     actorRef.tell(message, sender)
   }
 
-  private def internalSendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any, timeoutSecond: Int = 10): Try[RemoteReply] = Try{
+  private def internalSendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any, timeoutSecond: Int): Try[RemoteReply] = Try{
     try{
+      implicit val timeout: Timeout = timeoutSecond second ;
       Await.result(actorRef.ask(message, sender), timeoutSecond second) match {
         case x: Throwable =>
           logger.error(s"Got a generic Throwable exception (not expected) while sending a message to $actorRef: $x")

@@ -2,12 +2,12 @@ package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
 import net.degols.filesgate.libs.cluster.balancing.LoadBalancer
-import net.degols.filesgate.libs.cluster.core.Cluster
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, StartedWorkerActor, WorkerTypeInfo}
+import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, FailedWorkerActor, StartedWorkerActor, WorkerTypeInfo}
 import net.degols.filesgate.libs.election.Tools
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success, Try}
+import javax.inject.{Inject, Singleton}
 
 /**
   * Basic API to the Cluster class for internal use only. This avoid exposing too much the Cluster class.
@@ -44,6 +44,10 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
   def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
     cluster.registerStartedWorkerActor(startedWorkerActor)
     cluster.watchWorkerActor(context, startedWorkerActor)
+  }
+
+  def registerFailedWorkerActor(failedWorkerActor: FailedWorkerActor): Unit = {
+    cluster.registerFailedWorkerActor(failedWorkerActor)
   }
 
   def cleanOldWorkers(): Unit = {

@@ -40,17 +40,19 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * when they die
     * @param workerTypeInfo
     */
-  def watchWorkerTypeInfo(context: ActorContext, workerTypeInfo: WorkerTypeInfo): Try[Unit] = {
+  def watchWorkerTypeInfo(context: ActorContext, workerTypeInfo: WorkerTypeInfo): Try[ActorRef] = {
     // A watch can fail if the actor is failing just right now for example
     // I don't know if watching multiple times is a problem
-    Try{
+    val watcherAttempt = Try {
       context.watch(workerTypeInfo.actorRef)
-    } match {
-      case Success(res) => Try{res}
-      case Failure(err) =>
-        logger.error(s"Impossible to watch a WorkerTypeInfo: $workerTypeInfo")
-        Try{err}
     }
+
+    watcherAttempt match {
+      case Success(res) =>
+      case Failure(err) => logger.error(s"Impossible to watch a WorkerTypeInfo: $workerTypeInfo")
+    }
+
+    watcherAttempt
   }
 
   /**
@@ -109,30 +111,34 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * Every time a WorkerActor is started we want to monitor it
     * @param startedWorkerActor
     */
-  def watchWorkerActor(context: ActorContext, startedWorkerActor: StartedWorkerActor): Try[Unit] = {
-    Try{
+  def watchWorkerActor(context: ActorContext, startedWorkerActor: StartedWorkerActor): Try[ActorRef] = {
+    val watcherAttempt = Try{
       context.watch(startedWorkerActor.runningActorRef)
-    } match {
-      case Success(res) => Try{res}
-      case Failure(err) =>
-        logger.error(s"Impossible to watch a WorkerActor: $startedWorkerActor")
-        Try{err}
     }
+
+    watcherAttempt match {
+      case Success(res) =>
+      case Failure(err) => logger.error(s"Impossible to watch a WorkerActor: $startedWorkerActor")
+    }
+
+    watcherAttempt
   }
 
   /**
     * Every time a WorkerActor has failed we remove the monitoring
     * @param actorRef
     */
-  def unwatchWorkerActor(context: ActorContext, actorRef: ActorRef): Try[Unit] = {
-    Try{
+  def unwatchWorkerActor(context: ActorContext, actorRef: ActorRef): Try[ActorRef] = {
+    val watcherAttempt = Try{
       context.unwatch(actorRef)
-    } match {
-      case Success(res) => Try{res}
-      case Failure(err) =>
-        logger.error(s"Impossible to unwatch the actorRef of a WorkerActor or WorkerLeader: $actorRef")
-        Try{err}
     }
+
+    watcherAttempt match {
+      case Success(res) =>
+      case Failure(err) => logger.error(s"Impossible to unwatch the actorRef of a WorkerActor or WorkerLeader: $actorRef")
+    }
+
+    watcherAttempt
   }
 
   /**

@@ -1,10 +1,11 @@
 package net.degols.filesgate.libs.cluster.manager
 
-import akka.actor.{Actor, ActorRef, Terminated}
+import akka.actor.{Actor, ActorRef, Props, Terminated}
 import com.google.inject.{Inject, Singleton}
-import net.degols.filesgate.libs.cluster.{ConfigurationService, Tools}
+import net.degols.filesgate.libs.cluster.core.Cluster
+import net.degols.filesgate.libs.cluster.{ClusterConfiguration, Tools}
 import net.degols.filesgate.libs.cluster.messages._
-import net.degols.filesgate.libs.election.{IAmFollower, IAmLeader, TheLeaderIs}
+import net.degols.filesgate.libs.election._
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
@@ -15,21 +16,38 @@ import scala.util.{Failure, Success, Try}
   * knowing which WorkerActors are available, and how to start them.
   */
 @Singleton
-abstract class WorkerLeader @Inject()(localManager: Manager, configurationService: ConfigurationService) extends Actor{
+abstract class WorkerLeader @Inject()(electionService: ElectionService, configurationService: ConfigurationService, clusterConfiguration: ClusterConfiguration, cluster: Cluster) extends Actor{
   private val logger = LoggerFactory.getLogger(getClass)
+
+  /**
+    * Start the local Manager in charge of the election. It's not necessarily the manager in charge
+    */
+  val localManager: ActorRef = context.actorOf(Props.create(classOf[Manager], electionService, configurationService, clusterConfiguration, cluster), name = "LocalManager")
 
   override def preStart(): Unit = {
     super.preStart()
     // Inform the localManager of our existence
-    localManager.self ! IAmTheWorkerLeader
+    localManager ! IAmTheWorkerLeader
   }
+
+
+  /**
+    * To easily handle multiple JVMs with a lot of different actors, we might want to structure a bit their name
+    */
+  val COMPONENT: String = "Component"
+  val PACKAGE: String = "Package"
+
+  /**
+    * Number of started Actors locally, to be sure to not have any conflict in their name
+    */
+  var startedWorkers: Long = 0L
 
   /**
     * In very specific case the developer might wants to override this value
     */
   val nodeInfo: NodeInfo = {
     val networkHostname = Tools.remoteActorPath(self)
-    val localHostname = configurationService.localHostname
+    val localHostname = clusterConfiguration.localHostname
     NodeInfo(networkHostname, localHostname)
   }
 
@@ -56,8 +74,10 @@ abstract class WorkerLeader @Inject()(localManager: Manager, configurationServic
           case Some(currentManager) =>
             logger.debug("Send all workerTypeInfo to the manager")
             allWorkerTypeInfo.foreach(workerTypeInfo => {
-              workerTypeInfo.nodeInfo = nodeInfo
-              currentManager ! workerTypeInfo
+              val completeWorkerTypeId: String = s"$COMPONENT:$PACKAGE:${workerTypeInfo.workerTypeId}"
+              val prettyWorkerTypeInfo = WorkerTypeInfo(workerTypeInfo.actorRef, completeWorkerTypeId, workerTypeInfo.loadBalancerType)
+              prettyWorkerTypeInfo.nodeInfo = nodeInfo
+              currentManager ! prettyWorkerTypeInfo
             })
           case None => // Nothing to do
         }
@@ -90,13 +110,17 @@ abstract class WorkerLeader @Inject()(localManager: Manager, configurationServic
       case message: ClusterTopology =>
         Communication.setClusterTopology(message)
       case message: StartWorkerActor =>
-        Try{startWorker(message.workerTypeInfo.workerTypeId)} match {
+        // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
+        val workerName = s"${message.workerTypeInfo.workerTypeId}-$startedWorkers"
+        startedWorkers += 1
+        val initialName = message.workerTypeInfo.workerTypeId.split(":").drop(2).mkString(":")
+
+        Try{startWorker(initialName, workerName)} match {
           case Success(res) =>
             // Setting a watcher can leads to failure if the actors just dies at that moment
             Try{context.watch(res)} match {
               case Success(s) =>
-                val jvmId = Tools.jvmIdFromActorRef(self)
-                val workerActorHealth = WorkerActorHealth(self, message.workerTypeInfo, res, nodeInfo, jvmId, self, message.workerId)
+                val workerActorHealth = WorkerActorHealth(self, message.workerTypeInfo, res, nodeInfo, self, message.workerId)
                 jvmTopology.addWorkerActor(workerActorHealth)
                 message.actorRef ! StartedWorkerActor(self, message, res)
               case Failure(e) =>
@@ -116,10 +140,10 @@ abstract class WorkerLeader @Inject()(localManager: Manager, configurationServic
   }
 
   /**
-    * Class to implement by the developer.
+    * We start the related actor
     * @param workerTypeId
     */
-  def startWorker(workerTypeId: String): ActorRef
+  def startWorker(workerTypeId: String, actorName: String): ActorRef
 
   /**
     * List of available WorkerActors given by the developer in the current jvm.
