@@ -76,11 +76,11 @@ final class Manager @Inject()(electionService: ElectionService,
     case IAmLeader | IAmFollower | TheLeaderIs =>
       // The current leader might have changed, we are not sure yet
       if(_previousLeader != currentLeader) {
-        logger.warn(s"The Manager in charge has just changed from ${_previousLeader} to $currentLeader")
+        logger.warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader")
         _previousLeader = currentLeader
         _currentWorkerLeader match {
-          case Some(workerLeader) => workerLeader ! currentLeader
-          case None => logger.warn("The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
+          case Some(workerLeader) => workerLeader ! TheLeaderIs(currentLeader)
+          case None => logger.warn("[Manager] The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
         }
 
         if(isLeader) {
@@ -92,17 +92,18 @@ final class Manager @Inject()(electionService: ElectionService,
 
     case message: DistributeWork =>
       if(isLeader) { // There is no reason to distribute work if we are not leader
-        logger.debug(s"Distribute workers (soft: $message)")
+        logger.debug(s"[Manager] Distribute workers (soft: $message)")
         clusterManagement.distributeWorkers(loadBalancers, message.soft)
       }
 
     case message: CleanOldWorkers =>
       if(isLeader){
-        logger.debug("Clean old workers")
+        logger.debug("[Manager] Clean old workers")
         clusterManagement.cleanOldWorkers()
       }
 
     case message: ClusterRemoteMessage =>
+      logger.debug(s"[Manager] Received a ClusterRemoteMessage: $message")
       if(isLeader) {
         handleClusterMessage(message)
       }

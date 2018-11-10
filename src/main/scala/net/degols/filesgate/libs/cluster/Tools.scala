@@ -16,7 +16,13 @@ object Tools {
     * Return the full path to a given actor ref
     * @param actorRef
     */
-  def remoteActorPath(actorRef: ActorRef): String = akka.serialization.Serialization.serializedActorPath(actorRef).split("#").head
+  def remoteActorPath(actorRef: ActorRef): String = {
+    var path = akka.serialization.Serialization.serializedActorPath(actorRef).split("#").head
+    if(!path.contains("@")) {
+      throw new Exception(s"Missing configuration to have a valid remote actor path for $actorRef.")
+    }
+    path
+  }
 
   def jvmIdFromActorRef(actorRef: ActorRef): String = remoteActorPath(actorRef).replace(".tcp","").replace(".udp","")
 

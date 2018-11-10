@@ -23,7 +23,6 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
     * Start the local Manager in charge of the election. It's not necessarily the manager in charge
     */
   val localManager: ActorRef = context.actorOf(Props.create(classOf[Manager], electionService, configurationService, clusterConfiguration, cluster), name = "LocalManager")
-
   override def preStart(): Unit = {
     super.preStart()
     // Inform the localManager of our existence
@@ -72,7 +71,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
         // We need to send all worker type info (even if the manager has just switched, we don't care)
         manager match {
           case Some(currentManager) =>
-            logger.debug("Send all workerTypeInfo to the manager")
+            logger.debug(s"Send all workerTypeInfo to the manager ($currentManager)")
             allWorkerTypeInfo.foreach(workerTypeInfo => {
               val completeWorkerTypeId: String = s"$COMPONENT:$PACKAGE:${workerTypeInfo.workerTypeId}"
               val prettyWorkerTypeInfo = WorkerTypeInfo(workerTypeInfo.actorRef, completeWorkerTypeId, workerTypeInfo.loadBalancerType)
@@ -95,7 +94,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
         }
       case x =>
         // Message used by the developer using the library, we forward it
-        logger.warn("You should not use the WorkerLeader for your own messages. We accept it for now but you should avoid that.")
+        logger.warn(s"You should not use the WorkerLeader for your own messages (message: $x). We accept it for now but you should avoid that.")
         receive(msg)
     }
   }

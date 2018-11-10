@@ -38,7 +38,7 @@ class ClusterConfiguration @Inject()(defaultConfig: Config) {
       ConfigFactory.load(ConfigFactory.parseFile(fileInProject))
     }
   }
-  val config = projectConfig.withFallback(fallbackConfig)
+  val config: Config = projectConfig.withFallback(fallbackConfig)
 
   /**
     * Configuration for the cluster system. We merge multiple configuration files: One embedded, the other one from the project
@@ -69,6 +69,15 @@ class ClusterConfiguration @Inject()(defaultConfig: Config) {
     * How much time do we allow to start a WorkerOrder before considering as failing?
     */
   val startWorkerTimeout: FiniteDuration = config.getInt("cluster.start-worker-timeout-ms") millis
+
+  /**
+    * It's difficult to get a remote actor path locally. Because of that, we still want to know the current hostname + port
+    */
+  val akkaLocalHostname: String = config.getString("akka.remote.netty.tcp.hostname")
+  val akkaLocalPort: Int = config.getInt("akka.remote.netty.tcp.port")
+
+  val akkaClusterRemoteHostname: String = config.getString("cluster.akka.remote.netty.tcp.hostname")
+  val akkaClusterRemotePort: Int = config.getInt("cluster.akka.remote.netty.tcp.port")
 
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
