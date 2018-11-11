@@ -72,23 +72,12 @@ final class Manager @Inject()(electionService: ElectionService,
       // information about the leader status
       _currentWorkerLeader = Option(sender())
       _currentWorkerLeader.get ! TheLeaderIs(_previousLeader)
-
-    case IAmLeader | IAmFollower | TheLeaderIs =>
+    case x: TheLeaderIs =>
       // The current leader might have changed, we are not sure yet
-      if(_previousLeader != currentLeader) {
-        logger.warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader")
-        _previousLeader = currentLeader
-        _currentWorkerLeader match {
-          case Some(workerLeader) => workerLeader ! TheLeaderIs(currentLeader)
-          case None => logger.warn("[Manager] The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
-        }
+      checkChangedLeader()
 
-        if(isLeader) {
-          scheduleWorkDistribution()
-        } else {
-          unscheduleWorkDistribution()
-        }
-      }
+    case IAmLeader | IAmFollower =>
+      checkChangedLeader()
 
     case message: DistributeWork =>
       if(isLeader) { // There is no reason to distribute work if we are not leader
@@ -114,6 +103,23 @@ final class Manager @Inject()(electionService: ElectionService,
 
     case message =>
       logger.debug(s"[Manager] Received unknown message: $message")
+  }
+
+  def checkChangedLeader(): Unit = {
+    if(_previousLeader != currentLeader) {
+      logger.warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader")
+      _previousLeader = currentLeader
+      _currentWorkerLeader match {
+        case Some(workerLeader) => workerLeader ! TheLeaderIs(currentLeader)
+        case None => logger.warn("[Manager] The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
+      }
+
+      if(isLeader) {
+        scheduleWorkDistribution()
+      } else {
+        unscheduleWorkDistribution()
+      }
+    }
   }
 
   def handleClusterMessage(rawMessage: ClusterRemoteMessage): Unit = {

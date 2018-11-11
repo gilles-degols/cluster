@@ -31,7 +31,19 @@ case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancer
   // Automatically added by the WorkerLeader when it sends its info
   var nodeInfo: NodeInfo = _
 
-  override def toString: String = s"WorkerTypeInfo: $workerTypeId / $actorRef @ $creationDatetime"
+  override val toString: String = s"WorkerTypeInfo: $workerTypeId / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+}
+
+/**
+  * To avoid strange problems, you might need to load a proper worker info with the related actor ref. The nodeInfo
+  * must come from the appropriate node (most likely different than the one in the given WorkerTypeInfo), be careful
+  */
+object WorkerTypeInfo {
+  def fromWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo, actorRef: ActorRef, nodeInfo: NodeInfo): WorkerTypeInfo = {
+    val newWorkerTypeInfo = WorkerTypeInfo(actorRef, workerTypeInfo.workerTypeId, workerTypeInfo.loadBalancerType)
+    newWorkerTypeInfo.nodeInfo = nodeInfo
+    newWorkerTypeInfo
+  }
 }
 
 /**
@@ -49,7 +61,8 @@ case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, 
   */
 @SerialVersionUID(10060L)
 case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, runningActorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / $actorRef @ $creationDatetime"
+  var nodeInfo: NodeInfo = _
+  override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerId} - ${startWorkerActor.workerTypeInfo.workerTypeId} / ${Tools.remoteActorPath(runningActorRef)} @ $creationDatetime"
 }
 
 /**
@@ -60,7 +73,8 @@ case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerA
   */
 @SerialVersionUID(10070L)
 case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, exception: Exception) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / $actorRef @ $creationDatetime"
+  var nodeInfo: NodeInfo = _
+  override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -70,7 +84,7 @@ case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerAc
   */
 @SerialVersionUID(10080L)
 case class KillWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"KillWorkerActor: $actorRef @ $creationDatetime"
+  override def toString: String = s"KillWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -98,7 +112,7 @@ case class PauseWorkerActor(actorRef: ActorRef, timeInMilliSeconds: Option[Long]
         startTime + breakTime < Tools.datetime().getMillis
     }
   }
-  override def toString: String = s"PauseWorkerActor: $actorRef @ $creationDatetime during ${timeInMilliSeconds}"
+  override def toString: String = s"PauseWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime during ${timeInMilliSeconds}"
 }
 
 /**
@@ -107,7 +121,7 @@ case class PauseWorkerActor(actorRef: ActorRef, timeInMilliSeconds: Option[Long]
   */
 @SerialVersionUID(10100L)
 case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"ResumeWorkerActor: $actorRef @ $creationDatetime"
+  override def toString: String = s"ResumeWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -116,7 +130,7 @@ case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(ac
   */
 @SerialVersionUID(10110L)
 case class RequestWorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef) {
-  override def toString: String = s"RequestWorkerActorTopology: $actorRef @ $creationDatetime"
+  override def toString: String = s"RequestWorkerActorTopology: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**

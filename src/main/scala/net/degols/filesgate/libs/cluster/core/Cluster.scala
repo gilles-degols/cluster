@@ -60,8 +60,16 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * @param startedWorkerActor
     */
   def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
-    val worker = Cluster.getAndAddWorker(this, startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
-    worker.setStatus(ClusterElementRunning())
+    logger.debug(s"Register StartedWorkerActor: $startedWorkerActor (jvm id: ${startedWorkerActor.jvmId}). System was: \n${this}")
+    // For whatever reason, we can receive twice the same message even if the worker is already started.
+    val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.actorRef, startedWorkerActor.nodeInfo)
+    Cluster.getWorkerFromWorkerId(this, startedWorkerActor.startWorkerActor.workerId, startedWorkerActor.jvmId) match {
+      case Some(previousWorker) =>
+        val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
+        worker.setStatus(ClusterElementRunning())
+      case None =>
+        logger.error("We got a StartedWorkerActor which was already removed from the local topology. TODO: We should solve this bug")
+    }
   }
 
   /**
@@ -69,7 +77,8 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * @param failedWorkerActor
     */
   def registerFailedWorkerActor(failedWorkerActor: FailedWorkerActor): Unit = {
-    val worker = Cluster.getAndAddWorker(this, failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
+    val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.actorRef, failedWorkerActor.nodeInfo)
+    val worker = Cluster.getAndAddWorker(this, workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
     worker.setStatus(ClusterElementFailed(failedWorkerActor.exception))
   }
 
@@ -211,7 +220,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
       node.workerManagers.map(workerManager => {
         val workerManagerText: String = s"$nodeText - port: ${workerManager.port}"
         val workerTypeTexts: String = workerManager.workerTypes.map(workerType => {
-          val workerTypeText: String = s"\t${workerType.id} - ${workerType.workerTypeInfo.loadBalancerType}:"
+          val workerTypeText: String = s"\t${workerType.id} - ${workerType.workerTypeInfo.loadBalancerType} -"
           val workerTexts = workerType.workers.map(worker => worker.status.toString).groupBy(status => status).map(status => s"${status._1}: ${status._2.size}").mkString(", ")
           s"$workerTypeText $workerTexts"
         }).mkString("\n")
@@ -264,10 +273,15 @@ object Cluster {
       .map(_._1)
   }
 
-  def getAndAddWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo, workerId: String, workerActorRef: Option[ActorRef]): Worker = {
+  /**
+    * Be careful to NOT use the workerTypeInfo from startedWorkerActor to get the jvmId, as the jvmid inside it is not related to the actor
+    * starting the job, so you will have strange behavior!
+    * @return
+    */
+  def getAndAddWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo,  workerId: String, workerActorRef: Option[ActorRef]): Worker = {
     val workerType = Cluster.getAndAddWorkerType(cluster, workerTypeInfo)
     val rawWorker = Worker.fromWorkerIdAndActorRef(workerId, workerActorRef)
-    workerType.addWorker(rawWorker)
+    workerType.addWorker(rawWorker, replace = true)
   }
 
   def getWorker(cluster: Cluster, actorRef: ActorRef): Option[Worker] = {
@@ -275,4 +289,8 @@ object Cluster {
       .find(worker => worker.actorRef.isDefined && worker.actorRef.get == actorRef)
   }
 
+  def getWorkerFromWorkerId(cluster: Cluster, workerId: String, jvmId: String): Option[Worker] = {
+    cluster.nodes.flatMap(_.workerManagers).filter(_.id == jvmId).flatMap(_.workerTypes).flatMap(_.workers)
+      .find(worker => worker.workerId == workerId)
+  }
 }

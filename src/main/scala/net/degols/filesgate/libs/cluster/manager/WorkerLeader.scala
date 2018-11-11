@@ -45,7 +45,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
     * In very specific case the developer might wants to override this value
     */
   val nodeInfo: NodeInfo = {
-    val networkHostname = Tools.remoteActorPath(self)
+    val networkHostname = Tools.remoteActorPath(self).split("@")(1).split(":").head
     val localHostname = clusterConfiguration.localHostname
     NodeInfo(networkHostname, localHostname)
   }
@@ -121,17 +121,23 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
               case Success(s) =>
                 val workerActorHealth = WorkerActorHealth(self, message.workerTypeInfo, res, nodeInfo, self, message.workerId)
                 jvmTopology.addWorkerActor(workerActorHealth)
-                message.actorRef ! StartedWorkerActor(self, message, res)
+                val m = StartedWorkerActor(self, message, res)
+                m.nodeInfo = nodeInfo
+                message.actorRef ! m
               case Failure(e) =>
                 logger.error(s"Impossible to set a watcher, the actor probably died mid-way: $e")
-                message.actorRef ! FailedWorkerActor(self, message, new Exception("Failing actor after starting it"))
+                val m = FailedWorkerActor(self, message, new Exception("Failing actor after starting it"))
+                m.nodeInfo = nodeInfo
+                message.actorRef ! m
             }
           case Failure(err) =>
             val excep = err match {
               case exception: Exception => exception
               case _ => new Exception(s"Unknown error while starting a workerActor: $err")
             }
-            message.actorRef ! FailedWorkerActor(self, message, excep)
+            val m = FailedWorkerActor(self, message, excep)
+            m.nodeInfo = nodeInfo
+            message.actorRef ! m
         }
       case x =>
         logger.error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")

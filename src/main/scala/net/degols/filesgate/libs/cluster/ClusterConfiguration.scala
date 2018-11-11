@@ -14,7 +14,7 @@ import scala.util.Try
 /**
   * Created by Gilles.Degols on 03-09-18.
   */
-class ClusterConfiguration @Inject()(defaultConfig: Config) {
+class ClusterConfiguration @Inject()(val defaultConfig: Config) {
   private val logger = LoggerFactory.getLogger(getClass)
   /**
     * If the library is loaded directly as a subproject, the Config of the subproject overrides the configuration of the main
@@ -38,7 +38,7 @@ class ClusterConfiguration @Inject()(defaultConfig: Config) {
       ConfigFactory.load(ConfigFactory.parseFile(fileInProject))
     }
   }
-  val config: Config = projectConfig.withFallback(fallbackConfig)
+  val config: Config = defaultConfig.withFallback(projectConfig).withFallback(fallbackConfig)
 
   /**
     * Configuration for the cluster system. We merge multiple configuration files: One embedded, the other one from the project

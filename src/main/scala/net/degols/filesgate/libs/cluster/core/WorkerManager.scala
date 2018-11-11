@@ -1,6 +1,7 @@
 package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
+import net.degols.filesgate.libs.cluster.Tools
 import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -13,7 +14,7 @@ import scala.util.{Failure, Success, Try}
   *
   * @param id
   */
-class WorkerManager(id: String, val actorRef: ActorRef) extends ClusterElement{
+class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterElement{
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   /**
@@ -66,7 +67,7 @@ class WorkerManager(id: String, val actorRef: ActorRef) extends ClusterElement{
     * The port should normally be unique on the same node
     * @return
     */
-  def port: String = actorRef.toString().split("/")(2).split(":").last
+  def port: String = Tools.remoteActorPath(actorRef).split("/")(2).split(":").last
 
   def canEqual(a: Any): Boolean = a.isInstanceOf[WorkerManager]
   override def equals(that: Any): Boolean =
