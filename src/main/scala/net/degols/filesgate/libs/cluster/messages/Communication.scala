@@ -1,5 +1,7 @@
 package net.degols.filesgate.libs.cluster.messages
 
+import javax.swing.plaf.OptionPaneUI
+
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
@@ -25,21 +27,25 @@ object Communication {
     */
   private var _maxRetries: Int = 10
 
+  def clusterTopology: Option[ClusterTopology] = _clusterTopology
+
   def setMaxRetries(value: Int): Unit = if(value > 0) _maxRetries = value else throw new Exception("Value out of range")
 
-  def setClusterTopology(clusterTopology: ClusterTopology): Unit = _clusterTopology = Option(clusterTopology)
+  def actorRefsForId(workerTypeId: String): List[ActorRef] = {
+    _clusterTopology match {
+      case None =>
+        logger.error("ClusterTopology not yet available.")
+        List.empty[ActorRef]
+      case Some(topology) =>
+        topology.getWorkerActors(workerTypeId).filter(_.isRunning).map(_.workerActorRef)
+    }
+  }
 
   def sendWithReply(sender: ActorRef, workerTypeId: String, message: Any): Try[RemoteReply] = Try {
     var attempt = 0
     var result: Try[RemoteReply] = Failure(new Exception("Method not called"))
     while(attempt < _maxRetries) {
-      val actorRefs: List[ActorRef] = _clusterTopology match {
-        case None =>
-          logger.error("ClusterTopology not yet available.")
-          List.empty[ActorRef]
-        case Some(topology) =>
-          topology.getWorkerActors(workerTypeId).filter(_.isRunning).map(_.workerActorRef)
-      }
+      val actorRefs: List[ActorRef] = actorRefsForId(workerTypeId)
 
       if(actorRefs.nonEmpty) {
         // Simply take one at random. If we want to do smarter load balancing, you need to handle it yourselves
