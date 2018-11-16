@@ -230,7 +230,7 @@ case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo,
     var isKilled = false
     _clusterRemoteMessages.foreach {
       case x: KillWorkerActor => isKilled = true
-      case x: PauseWorkerActor => running = running && x.isInPause
+      case x: PauseWorkerActor => running = running && !x.isInPause // We could have two consecutive pauses, so it's best to verify the previous value of running
       case x: ResumeWorkerActor => running = true
       case x => // Other message we don't care about
     }
