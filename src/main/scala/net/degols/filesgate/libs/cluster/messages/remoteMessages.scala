@@ -11,13 +11,13 @@ import org.joda.time.DateTime
   */
 class ClusterRemoteMessage(actorRef: ActorRef) extends RemoteMessage(actorRef)
 
-@SerialVersionUID(10010L)
+@SerialVersionUID(1L)
 sealed trait InstanceType
 
-@SerialVersionUID(10020L)
+@SerialVersionUID(1L)
 case object JVMInstance extends InstanceType
 
-@SerialVersionUID(10030L)
+@SerialVersionUID(1L)
 case object ClusterInstance extends InstanceType
 
 /**
@@ -26,7 +26,7 @@ case object ClusterInstance extends InstanceType
   * @param actorRef the one from the current WorkerLeader
   * @param workerTypeId unique id of the WorkerActor to differentiate them
   */
-@SerialVersionUID(10040L)
+@SerialVersionUID(1L)
 case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType) extends ClusterRemoteMessage(actorRef){
   // Automatically added by the WorkerLeader when it sends its info
   var nodeInfo: NodeInfo = _
@@ -50,7 +50,7 @@ object WorkerTypeInfo {
   * Order from a Manager to a WorkerLeader to start an instance of a WorkerActor
   * @param actorRef
   */
-@SerialVersionUID(10050L)
+@SerialVersionUID(1L)
 case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String) extends ClusterRemoteMessage(actorRef){
   override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId @ $creationDatetime"
 }
@@ -59,7 +59,7 @@ case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, 
   * Result of a started WorkerActor
   * @param actorRef
   */
-@SerialVersionUID(10060L)
+@SerialVersionUID(1L)
 case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, runningActorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   var nodeInfo: NodeInfo = _
   override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerId} - ${startWorkerActor.workerTypeInfo.workerTypeId} / ${Tools.remoteActorPath(runningActorRef)} @ $creationDatetime"
@@ -71,7 +71,7 @@ case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerA
   * @param actorRef
   * @param startWorkerActor
   */
-@SerialVersionUID(10070L)
+@SerialVersionUID(1L)
 case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, exception: Exception) extends ClusterRemoteMessage(actorRef){
   var nodeInfo: NodeInfo = _
   override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
@@ -82,7 +82,7 @@ case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerAc
   * This messages asks the actor to stop completely, and it's directly received by the WorkerActor.
   * @param actorRef
   */
-@SerialVersionUID(10080L)
+@SerialVersionUID(1L)
 case class KillWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   override def toString: String = s"KillWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
@@ -96,7 +96,7 @@ case class KillWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(acto
   * @param timeSinceCreation should we wait for timeInMilliseconds since the creation time of the message (true) or since
   *                          the handling of the message (false). Default is false
   */
-@SerialVersionUID(10090L)
+@SerialVersionUID(1L)
 case class PauseWorkerActor(actorRef: ActorRef, timeInMilliSeconds: Option[Long] = None, timeSinceCreation: Boolean = false) extends ClusterRemoteMessage(actorRef){
   // Contains the handling time of the message. Useful to know when the pause started
   var handlingTime: Option[Long] = None
@@ -119,7 +119,7 @@ case class PauseWorkerActor(actorRef: ActorRef, timeInMilliSeconds: Option[Long]
   * Resume a paused workerActor
   * @param actorRef
   */
-@SerialVersionUID(10100L)
+@SerialVersionUID(1L)
 case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   override def toString: String = s"ResumeWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
@@ -128,7 +128,7 @@ case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(ac
   * To avoid handling some very specific race conditions when a Manager dies just after it sent a StartWorkerActor, the
   * Manager can request information about all actors of the current WorkerLeader to reconstruct its topology.
   */
-@SerialVersionUID(10110L)
+@SerialVersionUID(1L)
 case class RequestWorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef) {
   override def toString: String = s"RequestWorkerActorTopology: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
@@ -136,7 +136,7 @@ case class RequestWorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteM
 /**
   * Abstract class used for jvm and cluster topology
   */
-@SerialVersionUID(10180L)
+@SerialVersionUID(1L)
 abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   // List of running workers (workerTypeId -> workerActorHealth).
   var workerActors: Map[String, List[WorkerActorHealth]] = Map.empty[String, List[WorkerActorHealth]]
@@ -179,7 +179,7 @@ abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMess
 /**
   * Class representing the current JVM Topology. This is specific to a jvm and it is normally only shared with the Manager
   */
-@SerialVersionUID(10120L)
+@SerialVersionUID(1L)
 case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef) {
   override def toString: String = s"JVMTopology: $actorRef @ $creationDatetime"
 }
@@ -187,7 +187,7 @@ case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef)
 /**
   * Contain various information about a WorkerActor
   */
-@SerialVersionUID(10130L)
+@SerialVersionUID(1L)
 case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, workerLeader: ActorRef, workerActorId: String) extends ClusterRemoteMessage(actorRef) {
   def workerTypeId: String = workerTypeInfo.workerTypeId
 
@@ -243,7 +243,7 @@ case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo,
   * Class representing the entire cluster. This is shared with every jvm every x seconds if the topology changed during those
   * x seconds. The message is sent to the WorkerLeader, which is in charge of storing it.
   */
-@SerialVersionUID(10140L)
+@SerialVersionUID(1L)
 case class ClusterTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef) {
   override def toString: String = s"ClusterTopology: $actorRef @ $creationDatetime"
 }
@@ -252,7 +252,7 @@ case class ClusterTopology(actorRef: ActorRef) extends WorkerActorTopology(actor
   * Handle the load balancing configuration. Custom implementations can be done by the developers when needed. The class
   * must be reachable by any JVM. The message needs to be serializable, but the implementation does not need to be necessarily.
   */
-@SerialVersionUID(10150L)
+@SerialVersionUID(1L)
 trait LoadBalancerType extends SimpleRemoteMessage{}
 
 /**
@@ -260,7 +260,7 @@ trait LoadBalancerType extends SimpleRemoteMessage{}
   * @param instances
   * @param instanceType
   */
-@SerialVersionUID(10160L)
+@SerialVersionUID(1L)
 case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancerType {
   override def toString: String = {
     val location = if(instanceType == JVMInstance) "jvm" else "cluster"
@@ -274,12 +274,12 @@ case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = Cl
   * @param ips
   * @param instanceType
   */
-@SerialVersionUID(10170L)
+@SerialVersionUID(1L)
 case class IPLoadBalancerType(ips: List[String], instanceType: InstanceType = ClusterInstance) extends LoadBalancerType
 
 /**
   * Small information about the current node. Multiple JVMs could run on the same nodes.
   */
-@SerialVersionUID(10180L)
+@SerialVersionUID(1L)
 case class NodeInfo(networkHostname: String, localHostname: String)
 
