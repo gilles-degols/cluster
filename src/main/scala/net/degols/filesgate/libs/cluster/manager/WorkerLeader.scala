@@ -73,7 +73,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
           case Some(currentManager) =>
             logger.debug(s"Send all workerTypeInfo to the manager ($currentManager)")
             allWorkerTypeInfo.foreach(workerTypeInfo => {
-              val completeWorkerTypeId: String = s"$COMPONENT:$PACKAGE:${workerTypeInfo.workerTypeId}"
+              val completeWorkerTypeId: String = Communication.fullActorName(COMPONENT, PACKAGE, workerTypeInfo.workerTypeId)
               val prettyWorkerTypeInfo = WorkerTypeInfo(workerTypeInfo.actorRef, completeWorkerTypeId, workerTypeInfo.loadBalancerType)
               prettyWorkerTypeInfo.nodeInfo = nodeInfo
               currentManager ! prettyWorkerTypeInfo

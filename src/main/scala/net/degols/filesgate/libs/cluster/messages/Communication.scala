@@ -108,4 +108,15 @@ object Communication {
         throw x
     }
   }
+
+  /**
+    * Format a given actor name to have its full path with component / package
+    * @param component
+    * @param packag
+    * @param name
+    * @return
+    */
+  def fullActorName(component: String, packag: String, name: String): String = {
+    s"$component:$packag:$name"
+  }
 }
