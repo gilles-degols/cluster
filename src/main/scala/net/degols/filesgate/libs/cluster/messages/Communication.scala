@@ -1,7 +1,5 @@
 package net.degols.filesgate.libs.cluster.messages
 
-import javax.swing.plaf.OptionPaneUI
-
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
@@ -28,6 +26,7 @@ object Communication {
   private var _maxRetries: Int = 10
 
   def clusterTopology: Option[ClusterTopology] = _clusterTopology
+  def setClusterTopology(clusterTopology: ClusterTopology): Unit = _clusterTopology = Option(clusterTopology)
 
   def setMaxRetries(value: Int): Unit = if(value > 0) _maxRetries = value else throw new Exception("Value out of range")
 

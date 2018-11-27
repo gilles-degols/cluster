@@ -135,6 +135,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
               case exception: Exception => exception
               case _ => new Exception(s"Unknown error while starting a workerActor: $err")
             }
+            logger.error(s"Got an exception while trying to start a worker ${initialName}: ${Tools.formatStacktrace(excep)}")
             val m = FailedWorkerActor(self, message, excep)
             m.nodeInfo = nodeInfo
             message.actorRef ! m

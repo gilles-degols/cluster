@@ -9,6 +9,7 @@ lazy val playVersion = "2.6.1"
 lazy val akkaVersion = "2.5.2"
 
 libraryDependencies += "com.google.inject" % "guice" % "3.0"
+libraryDependencies += "com.typesafe.play" %% "play-json" % playVersion
 
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion exclude("log4j", "log4j") exclude("org.slf4j","slf4j-log4j12")
@@ -44,6 +45,9 @@ lazy val electionDependency = if(localElectionAvailable && useLocalElectionLibra
 }
 libraryDependencies ++= electionDependency
 
+// Mongo Java Driver
+// https://mvnrepository.com/artifact/org.mongodb/mongo-java-driver
+libraryDependencies += "org.mongodb" % "mongo-java-driver" % "3.7.0"
 
 // Akka Remoting
 libraryDependencies += "com.typesafe.akka" %% "akka-remote" % akkaVersion

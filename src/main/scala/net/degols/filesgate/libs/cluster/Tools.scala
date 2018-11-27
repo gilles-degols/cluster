@@ -1,7 +1,10 @@
 package net.degols.filesgate.libs.cluster
 
+import java.io.{PrintWriter, StringWriter}
+
 import akka.actor.ActorRef
 import org.joda.time.{DateTime, DateTimeZone}
+
 import sys.process._
 
 /**
@@ -11,6 +14,12 @@ object Tools {
   def datetime(): DateTime = new DateTime().withZone(DateTimeZone.UTC)
 
   def difference(otherDatetime: DateTime): Long = otherDatetime.getMillis - datetime().getMillis
+
+  def formatStacktrace(exception: Throwable): String = {
+    val sw = new StringWriter()
+    exception.printStackTrace(new PrintWriter(sw))
+    sw.toString
+  }
 
   /**
     * Return the full path to a given actor ref
