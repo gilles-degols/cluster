@@ -63,11 +63,11 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
   // TODO: Add suicide when we didn't get a new Manager in a short amount of time. Or better: send a message to all
   // actors to stop their work, and it will be resumed by the manager
   override def aroundReceive(receive: Receive, msg: Any): Unit = {
-    logger.debug(s"Around Receive: $msg")
+    logger.debug(s"[WorkerLeader] Around Receive: $msg")
     msg match {
       case message: TheLeaderIs => // We only receive a "TheLeaderIs" if the state changed
         logger.warn(s"Got a TheLeaderIs message from the manager: $message")
-        manager = message.leader
+        manager = message.leaderWrapper // message.leader is only used for the election != cluster management as the cluster management owns the election actor.
         // We need to send all worker type info (even if the manager has just switched, we don't care)
         manager match {
           case Some(currentManager) =>
@@ -110,6 +110,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
         Communication.setClusterTopology(message)
       case message: StartWorkerActor =>
         // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
+        logger.info(s"Starting worker type id: ${message.workerTypeInfo.workerTypeId}")
         val workerName = s"${message.workerTypeInfo.workerTypeId}-$startedWorkers"
         startedWorkers += 1
         val initialName = message.workerTypeInfo.workerTypeId.split(":").drop(2).mkString(":")

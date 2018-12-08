@@ -30,6 +30,7 @@ final class Manager @Inject()(electionService: ElectionService,
                     extends ElectionWrapper(electionService, configurationService){
   private val logger = LoggerFactory.getLogger(getClass)
   private var _previousLeader: Option[ActorRef] = None
+  private var _previousLeaderWrapper: Option[ActorRef] = None
   private var _currentWorkerLeader: Option[ActorRef] = None
 
   /**
@@ -71,7 +72,7 @@ final class Manager @Inject()(electionService: ElectionService,
       // When the WorkerLeader starts, it contacts the WorkerLeader. Afterwards, it will be used by the Manager to send
       // information about the leader status
       _currentWorkerLeader = Option(sender())
-      _currentWorkerLeader.get ! TheLeaderIs(_previousLeader)
+      _currentWorkerLeader.get ! TheLeaderIs(_previousLeader, _previousLeaderWrapper)
     case x: TheLeaderIs =>
       // The current leader might have changed, we are not sure yet
       checkChangedLeader()
@@ -107,10 +108,11 @@ final class Manager @Inject()(electionService: ElectionService,
 
   def checkChangedLeader(): Unit = {
     if(_previousLeader != currentLeader) {
-      logger.warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader")
+      logger.warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader, the wrapper changed from ${_previousLeaderWrapper} to $currentLeaderWrapper")
       _previousLeader = currentLeader
+      _previousLeaderWrapper = currentLeaderWrapper
       _currentWorkerLeader match {
-        case Some(workerLeader) => workerLeader ! TheLeaderIs(currentLeader)
+        case Some(workerLeader) => workerLeader ! TheLeaderIs(currentLeader, currentLeaderWrapper)
         case None => logger.warn("[Manager] The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
       }
 
