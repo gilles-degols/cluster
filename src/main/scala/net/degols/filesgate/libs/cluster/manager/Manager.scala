@@ -127,8 +127,14 @@ final class Manager @Inject()(electionService: ElectionService,
   def handleClusterMessage(rawMessage: ClusterRemoteMessage): Unit = {
     rawMessage match {
       case message: WorkerTypeInfo => clusterManagement.registerWorkerTypeInfo(message)
-      case message: StartedWorkerActor => clusterManagement.registerStartedWorkerActor(message)
-      case message: FailedWorkerActor => clusterManagement.registerFailedWorkerActor(message)
+      case message: WorkerActorHealth =>
+        clusterManagement.updateWorkerActorHealth(message)
+      case message: StartedWorkerActor =>
+        clusterManagement.registerStartedWorkerActor(message)
+        clusterManagement.sendClusterTopology()
+      case message: FailedWorkerActor =>
+        clusterManagement.registerFailedWorkerActor(message)
+        clusterManagement.sendClusterTopology()
       case other =>
         logger.error(s"Received unknown ClusterRemoteMessage: $rawMessage")
     }

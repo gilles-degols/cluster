@@ -154,7 +154,7 @@ abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMess
 
   def addWorkerActor(workerActorHealth: WorkerActorHealth): Unit = {
     val workerList: List[WorkerActorHealth] = workerActors.get(workerActorHealth.workerTypeId) match {
-      case Some(workers) => workers :+ workerActorHealth
+      case Some(workers) => workers.filterNot(_.workerActorRef == workerActorHealth.workerActorRef) :+ workerActorHealth // Filter the same WorkerActorHealth as the ClusterTopology update its information that way
       case None => List(workerActorHealth)
     }
     workerActors = workerActors ++ Map(workerActorHealth.workerTypeId -> workerList)
@@ -242,6 +242,8 @@ case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo,
 /**
   * Class representing the entire cluster. This is shared with every jvm every x seconds if the topology changed during those
   * x seconds. The message is sent to the WorkerLeader, which is in charge of storing it.
+  * TODO: Reduce the size of the ClusterTopology as it contains the WorkerActorHealth. We should only send a subset to every
+  * jvm (based on what they ask for, by default, everything), not the entire object
   */
 @SerialVersionUID(1L)
 case class ClusterTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef) {

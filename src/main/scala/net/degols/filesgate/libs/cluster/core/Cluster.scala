@@ -56,11 +56,15 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
   }
 
   /**
-    * When a StartedWorkerActor is received, we want to update its status
+    * When a StartedWorkerActor is received, we want to update its status, and update the clusterTopology information
     * @param startedWorkerActor
     */
   def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
     logger.debug(s"Register StartedWorkerActor: $startedWorkerActor (jvm id: ${startedWorkerActor.jvmId}). System was: \n${this}")
+
+    // The WorkerActorHealth is received separately and it will be updated from time to time when we ask for an update
+    // at each jvm. See updateWorkerActorHealth() which is called when we receive the appropriate message.
+
     // For whatever reason, we can receive twice the same message even if the worker is already started.
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.actorRef, startedWorkerActor.nodeInfo)
     Cluster.getWorkerFromWorkerId(this, startedWorkerActor.startWorkerActor.workerId, startedWorkerActor.jvmId) match {
@@ -72,14 +76,21 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     }
   }
 
+  def updateWorkerActorHealth(clusterTopology: ClusterTopology, workerActorHealth: WorkerActorHealth): Unit = {
+    clusterTopology.addWorkerActor(workerActorHealth) // Update if already existing
+  }
+
   /**
-    * When a FailedWorkerActor is received, we want to update its status
+    * When a FailedWorkerActor is received, we want to update its status. At the same time, we need to update the health
     * @param failedWorkerActor
     */
-  def registerFailedWorkerActor(failedWorkerActor: FailedWorkerActor): Unit = {
+  def registerFailedWorkerActor(clusterTopology: ClusterTopology, failedWorkerActor: FailedWorkerActor): Unit = {
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.actorRef, failedWorkerActor.nodeInfo)
     val worker = Cluster.getAndAddWorker(this, workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
     worker.setStatus(ClusterElementFailed(failedWorkerActor.exception))
+
+    // We also need to update the ClusterTopology directly
+    clusterTopology.removeWorkerActor(failedWorkerActor.actorRef)
   }
 
   /**

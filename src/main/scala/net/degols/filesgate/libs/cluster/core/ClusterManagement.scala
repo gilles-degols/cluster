@@ -2,7 +2,7 @@ package net.degols.filesgate.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
 import net.degols.filesgate.libs.cluster.balancing.LoadBalancer
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, FailedWorkerActor, StartedWorkerActor, WorkerTypeInfo}
+import net.degols.filesgate.libs.cluster.messages._
 import net.degols.filesgate.libs.election.Tools
 import org.slf4j.LoggerFactory
 
@@ -46,8 +46,16 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
     cluster.watchWorkerActor(context, startedWorkerActor)
   }
 
+  /**
+    * From time to time we can receive an update on the health of a given WorkerActor.
+    * @param failedWorkerActor
+    */
+  def updateWorkerActorHealth(workerActorHealth: WorkerActorHealth): Unit = {
+    cluster.updateWorkerActorHealth(_clusterTopology, workerActorHealth)
+  }
+
   def registerFailedWorkerActor(failedWorkerActor: FailedWorkerActor): Unit = {
-    cluster.registerFailedWorkerActor(failedWorkerActor)
+    cluster.registerFailedWorkerActor(_clusterTopology, failedWorkerActor)
   }
 
   def cleanOldWorkers(): Unit = {
@@ -73,6 +81,13 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
           logger.error(s"There is no loadBalancer accepting the type ${workerType.workerTypeInfo.loadBalancerType}!")
       }
     })
+  }
+
+  /**
+    * Send ClusterTopology to every WorkerLeader
+    */
+  def sendClusterTopology(): Unit = {
+    cluster.nodes.flatMap(_.workerManagers.map(_.actorRef)).foreach(workerManagerRef => workerManagerRef ! _clusterTopology)
   }
 
   /**

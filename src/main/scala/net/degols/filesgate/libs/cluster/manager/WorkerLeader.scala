@@ -107,6 +107,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
     // message correctly by default
     clusterRemoteMessage match {
       case message: ClusterTopology =>
+        logger.info(s"[WorkerLeader] Received ClusterTopology: $message")
         Communication.setClusterTopology(message)
       case message: StartWorkerActor =>
         // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
@@ -117,7 +118,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
 
         Try{startWorker(initialName, workerName)} match {
           case Success(res) =>
-            // Setting a watcher can leads to failure if the actors just dies at that moment
+            // Setting a watcher can lead to failure if the actors just die at that moment
             Try{context.watch(res)} match {
               case Success(s) =>
                 val workerActorHealth = WorkerActorHealth(self, message.workerTypeInfo, res, nodeInfo, self, message.workerId)
@@ -125,6 +126,7 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
                 val m = StartedWorkerActor(self, message, res)
                 m.nodeInfo = nodeInfo
                 message.actorRef ! m
+                message.actorRef ! workerActorHealth
               case Failure(e) =>
                 logger.error(s"Impossible to set a watcher, the actor probably died mid-way: $e")
                 val m = FailedWorkerActor(self, message, new Exception("Failing actor after starting it"))
