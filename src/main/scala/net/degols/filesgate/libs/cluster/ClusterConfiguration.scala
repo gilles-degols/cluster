@@ -38,7 +38,7 @@ class ClusterConfiguration @Inject()(val defaultConfig: Config) {
       ConfigFactory.load(ConfigFactory.parseFile(fileInProject))
     }
   }
-  val config: Config = defaultConfig.withFallback(projectConfig).withFallback(fallbackConfig)
+  val config: Config = projectConfig.withFallback(defaultConfig).withFallback(fallbackConfig)
 
   /**
     * Configuration for the cluster system. We merge multiple configuration files: One embedded, the other one from the project
