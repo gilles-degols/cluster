@@ -1,10 +1,14 @@
 package net.degols.filesgate.libs.cluster.messages
 
 import akka.actor.ActorRef
+import com.typesafe.config.Config
 import net.degols.filesgate.libs.cluster.Tools
 import net.degols.filesgate.libs.cluster.core.Node
 import net.degols.filesgate.libs.election.{RemoteMessage, SimpleRemoteMessage}
 import org.joda.time.DateTime
+import org.slf4j.{Logger, LoggerFactory}
+
+import scala.util.Try
 
 /**
   * Every RemoteMessage of this library should extend this class to easily manage them
@@ -258,6 +262,26 @@ case class ClusterTopology(actorRef: ActorRef) extends WorkerActorTopology(actor
 trait LoadBalancerType extends SimpleRemoteMessage{}
 
 /**
+  * Load the appropriate LoadBalancer from a configuration
+  */
+object LoadBalancerType {
+  private val logger: Logger = LoggerFactory.getLogger(getClass)
+
+  def loadFromConfig(config: Config): LoadBalancerType = {
+    // For now, we only have the BasicLoadBalancerType
+    val loadBalancer = Try{config.getString("load-balancer")}.getOrElse(BasicLoadBalancerType.CONFIGURATION_KEY)
+
+    if(loadBalancer == BasicLoadBalancerType.CONFIGURATION_KEY) {
+      BasicLoadBalancerType.loadFromConfig(config)
+    } else {
+      // By default, we use the basic load balancer
+      logger.error("No valid configuration key found for 'load-balancer', try to load the basic by default.")
+      BasicLoadBalancerType.loadFromConfig(config)
+    }
+  }
+}
+
+/**
   * Basic load balancing: start the number of asked instances, no more, no less.
   * @param instances
   * @param instanceType
@@ -269,6 +293,17 @@ case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = Cl
     s"BasicLoadBalancer: $instances instances/$location"
   }
 }
+
+object BasicLoadBalancerType{
+  val CONFIGURATION_KEY = "basic"
+
+  def loadFromConfig(config: Config): BasicLoadBalancerType = {
+    val rawInstanceType = Try{config.getString("instance-type")}.getOrElse("cluster")
+    val instanceType = if(rawInstanceType == "jvm") JVMInstance else ClusterInstance
+    BasicLoadBalancerType(config.getInt("instances"), instanceType)
+  }
+}
+
 
 /**
   * Load balancing where we want to use multiple ips (for example, we have multiple servers and each server has 1 or more
