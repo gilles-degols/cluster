@@ -16,7 +16,7 @@ object Communication {
 
   private var _clusterTopology: Option[ClusterTopology] = None
 
-  private var _askTimeoutSecond: Int = 0
+  private var _askTimeoutSecond: Int = 10
 
   def setAskTimeoutSecond(value: Int): Unit = if(value > 0) _askTimeoutSecond = value else throw new Exception("Value out of range")
 
@@ -89,8 +89,9 @@ object Communication {
 
   private def internalSendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any, timeoutSecond: Int): Try[RemoteReply] = Try{
     try{
-      implicit val timeout: Timeout = timeoutSecond second ;
-      Await.result(actorRef.ask(message, sender), timeoutSecond second) match {
+      implicit val timeout: Timeout = timeoutSecond second
+      implicit val send = sender
+      Await.result(actorRef.ask(message), timeoutSecond second) match {
         case x: Throwable =>
           logger.error(s"Got a generic Throwable exception (not expected) while sending a message to $actorRef: $x")
           throw x
