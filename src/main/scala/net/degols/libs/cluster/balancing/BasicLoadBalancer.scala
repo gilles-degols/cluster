@@ -1,8 +1,8 @@
-package net.degols.filesgate.libs.cluster.balancing
+package net.degols.libs.cluster.balancing
 
 import akka.actor.ActorContext
-import net.degols.filesgate.libs.cluster.core.{Node, Worker, WorkerManager, WorkerType}
-import net.degols.filesgate.libs.cluster.messages._
+import net.degols.libs.cluster.core.{Node, Worker, WorkerManager, WorkerType}
+import net.degols.libs.cluster.messages._
 import org.slf4j.LoggerFactory
 
 import scala.util.Random

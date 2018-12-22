@@ -1,9 +1,9 @@
-package net.degols.filesgate.libs.cluster.balancing
+package net.degols.libs.cluster.balancing
 
 import akka.actor.{ActorContext, ActorRef}
 import com.google.inject.Inject
-import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement, WorkerType}
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo}
+import net.degols.libs.cluster.core.{Cluster, ClusterManagement, WorkerType}
+import net.degols.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo}
 import org.slf4j.LoggerFactory
 
 /**

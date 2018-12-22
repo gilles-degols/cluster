@@ -1,4 +1,4 @@
-package net.degols.filesgate.libs.cluster
+package net.degols.libs.cluster
 
 import java.io.{PrintWriter, StringWriter}
 

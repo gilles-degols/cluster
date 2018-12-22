@@ -1,13 +1,13 @@
-package net.degols.filesgate.libs.cluster.manager
+package net.degols.libs.cluster.manager
 
 import javax.inject.{Inject, Singleton}
 
 import akka.actor.{ActorRef, Cancellable, Terminated}
-import net.degols.filesgate.libs.cluster.ClusterConfiguration
-import net.degols.filesgate.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
-import net.degols.filesgate.libs.cluster.core.{Cluster, ClusterManagement}
-import net.degols.filesgate.libs.cluster.messages._
-import net.degols.filesgate.libs.election._
+import net.degols.libs.cluster.ClusterConfiguration
+import net.degols.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
+import net.degols.libs.cluster.core.{Cluster, ClusterManagement}
+import net.degols.libs.cluster.messages._
+import net.degols.libs.election._
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success, Try}

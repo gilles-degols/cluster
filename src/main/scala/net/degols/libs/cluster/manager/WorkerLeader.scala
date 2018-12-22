@@ -1,11 +1,11 @@
-package net.degols.filesgate.libs.cluster.manager
+package net.degols.libs.cluster.manager
 
 import akka.actor.{Actor, ActorRef, Props, Terminated}
 import com.google.inject.{Inject, Singleton}
-import net.degols.filesgate.libs.cluster.core.Cluster
-import net.degols.filesgate.libs.cluster.{ClusterConfiguration, Tools}
-import net.degols.filesgate.libs.cluster.messages._
-import net.degols.filesgate.libs.election._
+import net.degols.libs.cluster.core.Cluster
+import net.degols.libs.cluster.{ClusterConfiguration, Tools}
+import net.degols.libs.cluster.messages._
+import net.degols.libs.election._
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._

@@ -1,4 +1,4 @@
-package net.degols.filesgate.libs.cluster.messages
+package net.degols.libs.cluster.messages
 
 import akka.actor.ActorRef
 import akka.pattern.ask

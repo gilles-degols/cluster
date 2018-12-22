@@ -1,8 +1,8 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
 import akka.actor.ActorRef
-import net.degols.filesgate.libs.cluster.messages.WorkerTypeInfo
-import net.degols.filesgate.libs.election.Tools
+import net.degols.libs.cluster.messages.WorkerTypeInfo
+import net.degols.libs.election.Tools
 import org.joda.time.DateTime
 
 import scala.util.Random

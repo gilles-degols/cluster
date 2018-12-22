@@ -1,4 +1,4 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
 
 /**

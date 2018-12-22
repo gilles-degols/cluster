@@ -1,10 +1,10 @@
-package net.degols.filesgate.libs.cluster
+package net.degols.libs.cluster
 
 import java.io.File
 
 import com.google.inject.Inject
 import com.typesafe.config.{Config, ConfigFactory}
-import net.degols.filesgate.libs.cluster.Tools.runCommand
+import net.degols.libs.cluster.Tools.runCommand
 import org.slf4j.LoggerFactory
 
 import collection.JavaConverters._

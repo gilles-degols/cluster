@@ -1,10 +1,10 @@
-package net.degols.filesgate.libs.cluster.messages
+package net.degols.libs.cluster.messages
 
 import akka.actor.ActorRef
 import com.typesafe.config.Config
-import net.degols.filesgate.libs.cluster.Tools
-import net.degols.filesgate.libs.cluster.core.Node
-import net.degols.filesgate.libs.election.{RemoteMessage, SimpleRemoteMessage}
+import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.core.Node
+import net.degols.libs.election.{RemoteMessage, SimpleRemoteMessage}
 import org.joda.time.DateTime
 import org.slf4j.{Logger, LoggerFactory}
 

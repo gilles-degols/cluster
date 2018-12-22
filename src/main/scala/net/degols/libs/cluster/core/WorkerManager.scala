@@ -1,8 +1,8 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
-import net.degols.filesgate.libs.cluster.Tools
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo}
+import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Success, Try}

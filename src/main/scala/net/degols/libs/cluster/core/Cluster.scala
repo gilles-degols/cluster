@@ -1,11 +1,11 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
 import javax.inject.Singleton
 
 import akka.actor.{ActorContext, ActorRef}
 import com.google.inject.Inject
-import net.degols.filesgate.libs.cluster.ClusterConfiguration
-import net.degols.filesgate.libs.cluster.messages._
+import net.degols.libs.cluster.ClusterConfiguration
+import net.degols.libs.cluster.messages._
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Random, Success, Try}

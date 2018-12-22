@@ -1,7 +1,7 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
-import net.degols.filesgate.libs.cluster.Tools
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, InstanceType, NodeInfo, WorkerTypeInfo}
+import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.messages.{ClusterTopology, InstanceType, NodeInfo, WorkerTypeInfo}
 
 /**
   * A WorkerType manages all worker instances of the same type as itself.

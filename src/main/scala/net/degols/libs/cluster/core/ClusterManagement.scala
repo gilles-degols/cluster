@@ -1,9 +1,9 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
-import net.degols.filesgate.libs.cluster.balancing.LoadBalancer
-import net.degols.filesgate.libs.cluster.messages._
-import net.degols.filesgate.libs.election.Tools
+import net.degols.libs.cluster.balancing.LoadBalancer
+import net.degols.libs.cluster.messages._
+import net.degols.libs.election.Tools
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success, Try}

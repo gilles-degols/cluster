@@ -1,6 +1,6 @@
-package net.degols.filesgate.libs.cluster.core
+package net.degols.libs.cluster.core
 
-import net.degols.filesgate.libs.cluster.messages.{ClusterTopology, NodeInfo}
+import net.degols.libs.cluster.messages.{ClusterTopology, NodeInfo}
 
 
 /**
