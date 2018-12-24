@@ -101,7 +101,7 @@ object Communication {
       }
     } catch {
       case x: TimeoutException =>
-        logger.warn(s"Got TimeoutException while trying to send a message to $actorRef.")
+        logger.warn(s"Got TimeoutException while trying to send a message ($message) to $actorRef.")
         throw x
       case x: Throwable =>
         logger.error(s"Got a generic Throwable exception (not expected) while sending a message to $actorRef.")
