@@ -1,6 +1,8 @@
 package net.degols.libs.cluster.messages
 
-case object IAmTheWorkerLeader
+import net.degols.libs.cluster.balancing.LoadBalancer
+
+case class IAmTheWorkerLeader(userLoadBalancers: List[LoadBalancer])
 
 class ClusterException(val message: String) extends Exception(message)
 

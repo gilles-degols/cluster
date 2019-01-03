@@ -3,10 +3,12 @@ package net.degols.libs.cluster.messages
 import akka.actor.ActorRef
 import com.typesafe.config.Config
 import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.balancing.BasicLoadBalancerType
 import net.degols.libs.cluster.core.Node
 import net.degols.libs.election.{RemoteMessage, SimpleRemoteMessage}
 import org.joda.time.DateTime
 import org.slf4j.{Logger, LoggerFactory}
+import play.api.libs.json.{JsObject, Json}
 
 import scala.util.Try
 
@@ -29,9 +31,12 @@ case object ClusterInstance extends InstanceType
   * it is able to start. You need to provide the appropriate LoadBalancer information
   * @param actorRef the one from the current WorkerLeader
   * @param workerTypeId unique id of the WorkerActor to differentiate them
+  * @param metadata any specific information about the WorkerTypeInfo. Useful to create homemade load balancer using
+  *                 those metadata information to correctly distribute the load. For example, for Filesgate, it's useful
+  *                 to know what kind of PipelineStep we have.
   */
 @SerialVersionUID(1L)
-case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType) extends ClusterRemoteMessage(actorRef){
+case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType, metadata: JsObject = Json.obj()) extends ClusterRemoteMessage(actorRef){
   // Automatically added by the WorkerLeader when it sends its info
   var nodeInfo: NodeInfo = _
 
@@ -259,7 +264,7 @@ case class ClusterTopology(actorRef: ActorRef) extends WorkerActorTopology(actor
   * must be reachable by any JVM. The message needs to be serializable, but the implementation does not need to be necessarily.
   */
 @SerialVersionUID(1L)
-trait LoadBalancerType extends SimpleRemoteMessage{}
+trait LoadBalancerType extends SimpleRemoteMessage
 
 /**
   * Load the appropriate LoadBalancer from a configuration
@@ -274,45 +279,10 @@ object LoadBalancerType {
     if(loadBalancer == BasicLoadBalancerType.CONFIGURATION_KEY) {
       BasicLoadBalancerType.loadFromConfig(config)
     } else {
-      // By default, we use the basic load balancer
-      logger.error("No valid configuration key found for 'load-balancer', try to load the basic by default.")
-      BasicLoadBalancerType.loadFromConfig(config)
+      throw new Exception("No valid configuration key found for 'load-balancer', you should load it yourselves as the given load-balancer is not in the cluster library.")
     }
   }
 }
-
-/**
-  * Basic load balancing: start the number of asked instances, no more, no less.
-  * @param instances
-  * @param instanceType
-  */
-@SerialVersionUID(1L)
-case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancerType {
-  override def toString: String = {
-    val location = if(instanceType == JVMInstance) "jvm" else "cluster"
-    s"BasicLoadBalancer: $instances instances/$location"
-  }
-}
-
-object BasicLoadBalancerType{
-  val CONFIGURATION_KEY = "basic"
-
-  def loadFromConfig(config: Config): BasicLoadBalancerType = {
-    val rawInstanceType = Try{config.getString("instance-type")}.getOrElse("cluster")
-    val instanceType = if(rawInstanceType == "jvm") JVMInstance else ClusterInstance
-    BasicLoadBalancerType(config.getInt("max-instances"), instanceType)
-  }
-}
-
-
-/**
-  * Load balancing where we want to use multiple ips (for example, we have multiple servers and each server has 1 or more
-  * ips they can use to access websites without being banned)
-  * @param ips
-  * @param instanceType
-  */
-@SerialVersionUID(1L)
-case class IPLoadBalancerType(ips: List[String], instanceType: InstanceType = ClusterInstance) extends LoadBalancerType
 
 /**
   * Small information about the current node. Multiple JVMs could run on the same nodes.

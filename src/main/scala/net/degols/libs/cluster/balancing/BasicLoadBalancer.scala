@@ -1,11 +1,35 @@
 package net.degols.libs.cluster.balancing
 
 import akka.actor.ActorContext
+import com.typesafe.config.Config
 import net.degols.libs.cluster.core.{Node, Worker, WorkerManager, WorkerType}
 import net.degols.libs.cluster.messages._
 import org.slf4j.LoggerFactory
 
-import scala.util.Random
+import scala.util.{Random, Try}
+
+/**
+  * Basic load balancing: start the number of asked instances, no more, no less.
+  * @param instances
+  * @param instanceType
+  */
+@SerialVersionUID(1L)
+case class BasicLoadBalancerType(instances: Int, instanceType: InstanceType = ClusterInstance) extends LoadBalancerType {
+  override def toString: String = {
+    val location = if(instanceType == JVMInstance) "jvm" else "cluster"
+    s"BasicLoadBalancer: $instances instances/$location"
+  }
+}
+
+object BasicLoadBalancerType{
+  val CONFIGURATION_KEY = "basic"
+
+  def loadFromConfig(config: Config): BasicLoadBalancerType = {
+    val rawInstanceType = Try{config.getString("instance-type")}.getOrElse("cluster")
+    val instanceType = if(rawInstanceType == "jvm") JVMInstance else ClusterInstance
+    BasicLoadBalancerType(config.getInt("max-instances"), instanceType)
+  }
+}
 
 /**
   * Very basic load balancing: Simply try to create the expected number of actors, nothing more, nothing less. No real
@@ -21,7 +45,7 @@ class BasicLoadBalancer extends LoadBalancer {
     logger.error("There is no hard work distribution in the BasicLoadBalancer.")
   }
 
-  def softWorkDistribution(workerType: WorkerType): Unit = {
+  override def softWorkDistribution(workerType: WorkerType): Unit = {
     val nodes = clusterManagement.cluster.nodesForWorkerType(workerType)
     val balancerType = workerType.workerTypeInfo.loadBalancerType.asInstanceOf[BasicLoadBalancerType]
 
@@ -80,5 +104,4 @@ class BasicLoadBalancer extends LoadBalancer {
       }
     }
   }
-
 }

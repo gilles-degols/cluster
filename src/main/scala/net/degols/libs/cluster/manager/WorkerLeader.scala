@@ -2,6 +2,7 @@ package net.degols.libs.cluster.manager
 
 import akka.actor.{Actor, ActorRef, Props, Terminated}
 import com.google.inject.{Inject, Singleton}
+import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.core.Cluster
 import net.degols.libs.cluster.{ClusterConfiguration, Tools}
 import net.degols.libs.cluster.messages._
@@ -20,15 +21,20 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
   private val logger = LoggerFactory.getLogger(getClass)
 
   /**
+    * Custom User LoadBalancer, they do not need to exist, it's just for advanced users. A reference to their instances
+    * will be sent to local manager only (so they do not need to be serializable)
+    */
+  protected val userLoadBalancers: List[LoadBalancer] = List.empty[LoadBalancer]
+
+  /**
     * Start the local Manager in charge of the election. It's not necessarily the manager in charge
     */
   val localManager: ActorRef = context.actorOf(Props.create(classOf[Manager], electionService, configurationService, clusterConfiguration, cluster), name = "LocalManager")
   override def preStart(): Unit = {
     super.preStart()
-    // Inform the localManager of our existence
-    localManager ! IAmTheWorkerLeader
+    // Inform the localManager of our existence and give the optional UserLoadBalancer objects
+    localManager ! IAmTheWorkerLeader(userLoadBalancers)
   }
-
 
   /**
     * To easily handle multiple JVMs with a lot of different actors, we might want to structure a bit their name

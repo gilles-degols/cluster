@@ -41,13 +41,14 @@ final class Manager @Inject()(electionService: ElectionService,
   private var _scheduleCleaning: Option[Cancellable] = None
 
   /**
-    * The clusterManagement and LoadBalancer should nothing by themselves to distribute work or so on. They should
+    * The clusterManagement and LoadBalancer should do nothing by themselves to distribute work or so on. They should
     * rely on automatic calls to a limited number of methods
     */
   protected val clusterManagement = new ClusterManagement(context, cluster)
 
   /**
-    * Custom User LoadBalancer, they do not need to exist, it's just for advanced users
+    * Custom User LoadBalancer, they do not need to exist, it's just for advanced users. They can be set by the workerLeader once
+    * it's initialized.
     */
   protected var userLoadBalancers: List[LoadBalancer] = List.empty[LoadBalancer]
 
@@ -68,9 +69,10 @@ final class Manager @Inject()(electionService: ElectionService,
 
 
   override def receive: Receive = {
-    case IAmTheWorkerLeader =>
+    case x: IAmTheWorkerLeader =>
       // When the WorkerLeader starts, it contacts the WorkerLeader. Afterwards, it will be used by the Manager to send
       // information about the leader status
+      userLoadBalancers = x.userLoadBalancers
       _currentWorkerLeader = Option(sender())
       _currentWorkerLeader.get ! TheLeaderIs(_previousLeader, _previousLeaderWrapper)
     case x: TheLeaderIs =>
