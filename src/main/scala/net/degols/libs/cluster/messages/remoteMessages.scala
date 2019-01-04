@@ -49,7 +49,7 @@ case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancer
   */
 object WorkerTypeInfo {
   def fromWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo, actorRef: ActorRef, nodeInfo: NodeInfo): WorkerTypeInfo = {
-    val newWorkerTypeInfo = WorkerTypeInfo(actorRef, workerTypeInfo.workerTypeId, workerTypeInfo.loadBalancerType)
+    val newWorkerTypeInfo = WorkerTypeInfo(actorRef, workerTypeInfo.workerTypeId, workerTypeInfo.loadBalancerType, workerTypeInfo.metadata)
     newWorkerTypeInfo.nodeInfo = nodeInfo
     newWorkerTypeInfo
   }
@@ -273,14 +273,17 @@ object LoadBalancerType {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   def loadFromConfig(config: Config): LoadBalancerType = {
-    // For now, we only have the BasicLoadBalancerType
-    val loadBalancer = Try{config.getString("load-balancer")}.getOrElse(BasicLoadBalancerType.CONFIGURATION_KEY)
+    val loadBalancer = getLoadBalancerType(config).getOrElse(BasicLoadBalancerType.CONFIGURATION_KEY)
 
     if(loadBalancer == BasicLoadBalancerType.CONFIGURATION_KEY) {
       BasicLoadBalancerType.loadFromConfig(config)
     } else {
       throw new Exception("No valid configuration key found for 'load-balancer', you should load it yourselves as the given load-balancer is not in the cluster library.")
     }
+  }
+
+  def getLoadBalancerType(config: Config): Option[String] = {
+    Try{config.getString("load-balancer")}.toOption
   }
 }
 

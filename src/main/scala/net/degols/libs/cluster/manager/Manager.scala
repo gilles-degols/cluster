@@ -128,7 +128,8 @@ final class Manager @Inject()(electionService: ElectionService,
 
   def handleClusterMessage(rawMessage: ClusterRemoteMessage): Unit = {
     rawMessage match {
-      case message: WorkerTypeInfo => clusterManagement.registerWorkerTypeInfo(message)
+      case message: WorkerTypeInfo =>
+        clusterManagement.registerWorkerTypeInfo(message)
       case message: WorkerActorHealth =>
         clusterManagement.updateWorkerActorHealth(message)
       case message: StartedWorkerActor =>

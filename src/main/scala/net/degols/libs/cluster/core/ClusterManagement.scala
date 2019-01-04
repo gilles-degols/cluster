@@ -4,6 +4,7 @@ import akka.actor.{ActorContext, ActorRef}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.messages._
 import net.degols.libs.election.Tools
+import net.degols.libs.cluster.{Tools => ClusterTools}
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success, Try}
@@ -75,7 +76,7 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
             }
           } match {
             case Success(res) => // Nothing to do
-            case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of ${workerType}: ${Tools.stacktraceToString(err)}")
+            case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of ${workerType}: ${ClusterTools.formatStacktrace(err)}")
           }
         case None =>
           logger.error(s"There is no loadBalancer accepting the type ${workerType.workerTypeInfo.loadBalancerType}!")
