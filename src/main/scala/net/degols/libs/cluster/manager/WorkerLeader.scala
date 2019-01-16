@@ -1,6 +1,6 @@
 package net.degols.libs.cluster.manager
 
-import akka.actor.{Actor, ActorRef, Props, Terminated}
+import akka.actor.{Actor, ActorRef, Cancellable, Kill, Props, Terminated}
 import com.google.inject.{Inject, Singleton}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.core.Cluster
@@ -9,16 +9,29 @@ import net.degols.libs.cluster.messages._
 import net.degols.libs.election._
 import org.slf4j.LoggerFactory
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+
+/**
+  * Internal message to verify if we might be re-connected to a manager after a short network problem
+  */
+case object IsStillDisconnectedFromManager
 
 /**
   * Manage the various Workers in the current JVM, only one instance is allowed, hence the Singleton. This is the actor
   * knowing which WorkerActors are available, and how to start them.
   */
 @Singleton
-abstract class WorkerLeader @Inject()(electionService: ElectionService, configurationService: ConfigurationService, clusterConfiguration: ClusterConfiguration, cluster: Cluster) extends Actor{
+abstract class WorkerLeader @Inject()(electionService: ElectionService, configurationService: ConfigurationService, clusterConfiguration: ClusterConfiguration, cluster: Cluster)(implicit val ec: ExecutionContext) extends Actor{
   private val logger = LoggerFactory.getLogger(getClass)
+
+  /**
+    * Scheduled message to verify if we are still disconnected from the manager in charge after some time. If yes, we
+    * need to kill every actor of our current jvm
+    */
+  private var checkManagerDisconnection: Option[Cancellable] = None
+
 
   /**
     * Custom User LoadBalancer, they do not need to exist, it's just for advanced users. A reference to their instances
@@ -89,12 +102,24 @@ abstract class WorkerLeader @Inject()(electionService: ElectionService, configur
       case clusterMessage: ClusterRemoteMessage =>
         // Message used for the administration, we execute it
         handleClusterRemoteMessage(clusterMessage)
+
+      case IsStillDisconnectedFromManager =>
+        manager match {
+          case Some(m) =>
+            logger.warn("We just re-check if we are still disconnected from the Manager and it seems we got it back. We let workers continue their job. Be sure to have implemented a hard-load-balancing in charge of killing workers in excess.")
+          case None =>
+            logger.warn("We just re-check if we are still disconnected from the Manager and it seems we still don't have it, so we kill all our workers.")
+            jvmTopology.workerActors.values.flatMap(_.map(_.actorRef)).foreach(_ ! Kill)
+        }
+
       case terminatingActor: Terminated =>
         // We watch our own actors, but also the Manager
         if(jvmTopology.removeWorkerActor(terminatingActor.actor)) {
           logger.warn(s"Got a Terminated message from a WorkerActor (${terminatingActor.actor}), it has been removed from our jvm topology.")
         } else if(manager.isDefined && manager.get == terminatingActor.actor) {
-          logger.warn("Got a Terminated message from the Manager, we let the actors continue their job and wait for a new Manager to come in.")
+          checkManagerDisconnection.map(c => c.cancel())
+          logger.warn(s"Got a Terminated message from the Manager, we let the actors continue their job during ${clusterConfiguration.watcherTimeoutBeforeSuicide.toSeconds} seconds and wait for a new Manager to come in.")
+          checkManagerDisconnection = Option(context.system.scheduler.scheduleOnce(clusterConfiguration.watcherTimeoutBeforeSuicide, self, IsStillDisconnectedFromManager))
         } else {
           logger.error(s"Got a Terminated message from a unknown actor: ${terminatingActor.actor}")
         }
