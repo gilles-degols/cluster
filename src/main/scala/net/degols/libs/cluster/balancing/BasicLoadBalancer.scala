@@ -27,7 +27,7 @@ object BasicLoadBalancerType{
   def loadFromConfig(config: Config): BasicLoadBalancerType = {
     val rawInstanceType = Try{config.getString("instance-type")}.getOrElse("cluster")
     val instanceType = if(rawInstanceType == "jvm") JVMInstance else ClusterInstance
-    BasicLoadBalancerType(config.getInt("max-instances"), instanceType)
+    BasicLoadBalancerType(Try{config.getInt("max-instances")}.getOrElse(1), instanceType)
   }
 }
 
