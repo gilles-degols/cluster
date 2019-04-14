@@ -6,7 +6,7 @@ import akka.util.Timeout
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, TimeoutException}
+import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Random, Try}
 
 case class RemoteReply(content: Any)
@@ -81,6 +81,14 @@ object Communication {
     }
 
     result.get
+  }
+
+  def askForReply(sender: ActorRef, actorRef: ActorRef, message: Any)(implicit ec: ExecutionContext): Future[RemoteReply] = {
+    val timeout: Timeout = _askTimeoutSecond second
+    implicit val send: ActorRef = sender
+    actorRef.ask(message)(timeout).map(raw => {
+      RemoteReply(raw)
+    })
   }
 
   def sendWithoutReply(sender: ActorRef, actorRef: ActorRef, message: Any): Try[Unit] = Try{
