@@ -3,7 +3,7 @@ package net.degols.libs.cluster.balancing
 import akka.actor.{ActorContext, ActorRef}
 import com.google.inject.Inject
 import net.degols.libs.cluster.core.{Cluster, ClusterManagement, WorkerType}
-import net.degols.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo}
+import net.degols.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.LoggerFactory
 
 /**
@@ -28,9 +28,9 @@ abstract class LoadBalancer {
   /**
     * Check a given WorkerType, etc. to be sure that we have the appropriate number of started actors for each WorkerManager
     * This method is called from time to time. The "soft" mode is called every few seconds to create missing actors, the "hard" mode
-    * is called once every few minutes to optionnally stop actors in some JVMs and start them elsewhere.
+    * is called once every few minutes to optionally stop actors in some JVMs and start them elsewhere.
     */
-  def softWorkDistribution(workerType: WorkerType): Unit
+  def softWorkDistribution(workerType: WorkerType, order: WorkerTypeOrder): Unit
 
-  def hardWorkDistribution(workerType: WorkerType): Unit
+  def hardWorkDistribution(workerType: WorkerType, order: WorkerTypeOrder): Unit
 }

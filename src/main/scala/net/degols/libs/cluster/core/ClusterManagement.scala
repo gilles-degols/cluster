@@ -38,6 +38,11 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
     cluster.watchWorkerTypeInfo(context, workerTypeInfo)
   }
 
+  def registerWorkerTypeOrder(workerTypeOrder: WorkerTypeOrder): Unit = {
+    cluster.registerWorkerTypeOrder(workerTypeOrder)
+    cluster.watchWorkerTypeOrder(context, workerTypeOrder)
+  }
+
   /**
     * When a WorkerActor is started, we want to save its status, and watch its actor.
     * @param startedWorkerActor
@@ -64,23 +69,42 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
   }
 
   def distributeWorkers(loadBalancers: List[LoadBalancer], softDistribution: Boolean): Unit = {
+    // Lookup to easily find the orders for a given workerType
+    val orders = cluster.ordersByWorkerTypeId()
+
     // For each WorkerType we need to find the appropriate load balancer, then ask him to do the work distribution
-    cluster.nodesByWorkerType().keys.foreach(workerType => {
-      loadBalancers.find(_.isLoadBalancerType(workerType.workerTypeInfo.loadBalancerType)) match {
-        case Some(loadBal) =>
-          Try{
-            if(softDistribution) {
-              loadBal.softWorkDistribution(workerType)
-            } else {
-              loadBal.hardWorkDistribution(workerType)
+    cluster.nodesByWorkerType().keys
+      .flatMap(workerType => {
+        // We execute the load balancer for every order we have for the given workerType
+        val ordersForType = orders.getOrElse(workerType.workerTypeInfo.workerTypeId, List.empty[WorkerTypeOrder])
+          .map(order => (workerType, order))
+
+        if(ordersForType.size >= 2) {
+          logger.info(s"We have ${ordersForType.size} different orders for ${workerType.workerTypeInfo.workerTypeId}")
+        }
+
+        ordersForType
+      })
+      .foreach(raw => {
+        val workerType = raw._1
+        val order = raw._2
+
+        // Find the appropriate load balancer for the current order & type
+        loadBalancers.find(_.isLoadBalancerType(order.loadBalancerType)) match {
+          case Some(loadBal) =>
+            Try{
+              if(softDistribution) {
+                loadBal.softWorkDistribution(workerType, order)
+              } else {
+                loadBal.hardWorkDistribution(workerType, order)
+              }
+            } match {
+              case Success(res) => // Nothing to do
+              case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of $workerType: ${ClusterTools.formatStacktrace(err)}")
             }
-          } match {
-            case Success(res) => // Nothing to do
-            case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of ${workerType}: ${ClusterTools.formatStacktrace(err)}")
-          }
-        case None =>
-          logger.error(s"There is no loadBalancer accepting the type ${workerType.workerTypeInfo.loadBalancerType}!")
-      }
+          case None =>
+            logger.error(s"There is no loadBalancer accepting the type ${order.loadBalancerType}!")
+        }
     })
   }
 
@@ -96,8 +120,13 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
     * balancing directly, as most of the time all the actors in one JVM will fail at the same time. That would trigger
     * a lot of identical requests to re-distribute the workers. It is better to simply wait for the SoftWorkerDistribution
     * message automatically sends every few seconds.
+    *
+    * If the actorRef is linked to the initiator of a WorkerTypeOrder, remove it. If other sent the same order, no problem.
+    * If no-one is alive anymore, the LoadBalancer need to be in charge of stop the related actors.
     */
   def removeWatchedActor(actorRef: ActorRef): Unit = {
+    cluster.registerFailedWorkerOrderSender(actorRef)
+
     if(!cluster.registerFailedWorkerActor(actorRef)) {
       cluster.registerFailedWorkerLeader(actorRef)
     }

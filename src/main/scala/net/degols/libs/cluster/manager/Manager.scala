@@ -130,6 +130,8 @@ final class Manager @Inject()(electionService: ElectionService,
     rawMessage match {
       case message: WorkerTypeInfo =>
         clusterManagement.registerWorkerTypeInfo(message)
+      case message: WorkerTypeOrder =>
+        clusterManagement.registerWorkerTypeOrder(message)
       case message: WorkerActorHealth =>
         clusterManagement.updateWorkerActorHealth(message)
       case message: StartedWorkerActor =>

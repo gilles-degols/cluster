@@ -39,17 +39,17 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
     * Ask the distant actor to launch a specific instance of given WorkerType. This communication is async but we create
     * a related Worker locally to remember that we just ask for it to launch
     */
-  def startWorker(context: ActorContext, workerType: WorkerType): Unit = {
-    val properWorkerType = workerTypes.find(_ == workerType) match {
+  def startWorker(context: ActorContext, workerType: WorkerType, orderId: String): Unit = {
+    workerTypes.find(_ == workerType) match {
       case None => logger.error(s"No WorkerType $workerType found in $this. Not possible to start worker.")
       case Some(w) =>
         val workerId = Worker.generateWorkerId(workerType.workerTypeInfo)
         Try {
-          actorRef ! StartWorkerActor(context.self, workerType.workerTypeInfo, workerId)
+          actorRef ! StartWorkerActor(context.self, workerType.workerTypeInfo, workerId, orderId)
         } match {
           case Success(res) =>
             // We still don't know if the actor is correctly started or not, but we must avoid creating a new one for the next soft distribution.
-            val worker = Worker.fromWorkerIdAndActorRef(workerId, None)
+            val worker = Worker.fromWorkerIdAndActorRef(workerId, orderId, None)
             worker.setStatus(ClusterElementStarting())
             w.addWorker(worker)
           case Failure(err) =>

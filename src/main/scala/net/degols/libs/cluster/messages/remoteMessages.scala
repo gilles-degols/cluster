@@ -27,17 +27,44 @@ case object JVMInstance extends InstanceType
 case object ClusterInstance extends InstanceType
 
 /**
-  * Message sent when the system is booting up. The WorkerLeader sent multiple WorkerTypeInfo indicating which actors
-  * it is able to start. You need to provide the appropriate LoadBalancer information
-  * @param actorRef the one from the current WorkerLeader
-  * @param workerTypeId unique id of the WorkerActor to differentiate them
+  * Message sent by any JVM asking the Manager to start specific instances of some WorkerTypeId on any JVM.
+  * An update of the WorkerTypeInfo can be sent at any moment by a JVM. To be able to differentiate an update versus some
+  * new information we use the "id" sent by the JVM (so it's up to the developer to correctly select the "id" field).
+  * This also allows to have multiple JVMs sending the same order but only being executed once (this will happen frequently)
+  * @param actorRef
+  * @param workerTypeId
+  * @param loadBalancerType The load balancer in charge of handling the number of actors we want to be started. If
+  *                         two different orders are sent with the same id, only the first received will be used.
+  * @param id Like a sub-group for a given WorkerTypeId (see explanation above)
   * @param metadata any specific information about the WorkerTypeInfo. Useful to create homemade load balancer using
   *                 those metadata information to correctly distribute the load. For example, for Filesgate, it's useful
   *                 to know what kind of PipelineStep we have.
   */
 @SerialVersionUID(1L)
-case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType, metadata: JsObject = Json.obj()) extends ClusterRemoteMessage(actorRef){
-  // Automatically added by the WorkerLeader when it sends its info
+case class WorkerTypeOrder(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType, id: String, metadata: JsObject = Json.obj()) extends ClusterRemoteMessage(actorRef){
+  /**
+    * Automatically added by the WorkerLeader when it sends its info.
+    * This does not means this WorkerTypeInfo can have the related actor started on the nodeInfo
+    */
+  var nodeInfo: NodeInfo = _
+
+  override val toString: String = s"WorkerTypeOrder ($id): $workerTypeId / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+}
+
+/**
+  * Message sent when the system is booting up. The WorkerLeader sent multiple WorkerTypeInfo indicating which actors
+  * it is able to start, but it does not start any actor directly, the WorkerTypeOrder still needs to be sent with
+  * the appropriate WorkerTypeOrder.
+  * You need to provide the appropriate LoadBalancer information
+  * @param actorRef the one from the current WorkerLeader
+  * @param workerTypeId unique id of the WorkerActor to differentiate them
+  */
+@SerialVersionUID(1L)
+case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, metadata: JsObject = Json.obj()) extends ClusterRemoteMessage(actorRef){
+  /**
+    * Automatically added by the WorkerLeader when it sends its info.
+    * This does not means this WorkerTypeInfo can have the related actor started on the nodeInfo
+    */
   var nodeInfo: NodeInfo = _
 
   override val toString: String = s"WorkerTypeInfo: $workerTypeId / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
@@ -49,7 +76,7 @@ case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, loadBalancer
   */
 object WorkerTypeInfo {
   def fromWorkerTypeInfo(workerTypeInfo: WorkerTypeInfo, actorRef: ActorRef, nodeInfo: NodeInfo): WorkerTypeInfo = {
-    val newWorkerTypeInfo = WorkerTypeInfo(actorRef, workerTypeInfo.workerTypeId, workerTypeInfo.loadBalancerType, workerTypeInfo.metadata)
+    val newWorkerTypeInfo = WorkerTypeInfo(actorRef, workerTypeInfo.workerTypeId, workerTypeInfo.metadata)
     newWorkerTypeInfo.nodeInfo = nodeInfo
     newWorkerTypeInfo
   }
@@ -60,8 +87,8 @@ object WorkerTypeInfo {
   * @param actorRef
   */
 @SerialVersionUID(1L)
-case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId @ $creationDatetime"
+case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String, orderId: String) extends ClusterRemoteMessage(actorRef){
+  override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId / $orderId @ $creationDatetime"
 }
 
 /**

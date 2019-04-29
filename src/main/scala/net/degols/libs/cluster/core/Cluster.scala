@@ -9,6 +9,9 @@ import net.degols.libs.cluster.messages._
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Random, Success, Try}
+import scala.collection.mutable
+
+case class WorkerTypeOrderWrapper(order: WorkerTypeOrder, actors: mutable.Set[ActorRef])
 
 /**
   * General interface to access information about the cluster
@@ -16,6 +19,14 @@ import scala.util.{Failure, Random, Success, Try}
 @Singleton
 class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
+
+  /**
+    * All WorkerTypeOrder received from any JVM of the cluster. The duplicate orders are automatically removed before
+    * being stored here.
+    * Orders will be automatically removed if all the related JVM initiating the orders are dead
+    * TODO: Avoid going through 1000s elements for each soft-work distribution
+    */
+  private var _orders: mutable.Map[String, WorkerTypeOrderWrapper] = mutable.Map[String, WorkerTypeOrderWrapper]()
 
   /**
     * All instances of Nodes found on the cluster
@@ -35,6 +46,25 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     workerManager.addWorkerType(rawWorkerType)
   }
 
+  def registerWorkerTypeOrder(workerTypeOrder: WorkerTypeOrder): Unit = {
+    _orders.get(workerTypeOrder.id) match {
+      case Some(wrapper) =>
+        wrapper.actors.add(workerTypeOrder.actorRef)
+      case None=>
+        val actors = mutable.Set(workerTypeOrder.actorRef)
+        _orders.put(workerTypeOrder.id, WorkerTypeOrderWrapper(workerTypeOrder, actors))
+    }
+  }
+
+  /**
+    * Return a mapping of all WorkerTypeId -> List(WorkerTypeOrder). We can have multiple WorkerTypeOrder for a given
+    * WorkerTypeId as different orders could come from multiple JVMs
+    * @return
+    */
+  def ordersByWorkerTypeId(): Map[String, List[WorkerTypeOrder]] = {
+    _orders.groupBy(_._2.order.workerTypeId).map(raw => raw._1 -> raw._2.values.map(_.order).toList)
+  }
+
   /**
     * Every time we add a WorkerTypeInfo we probably want to watch the status of the various actors, to be notified
     * when they die
@@ -50,6 +80,27 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     watcherAttempt match {
       case Success(res) =>
       case Failure(err) => logger.error(s"Impossible to watch a WorkerTypeInfo: $workerTypeInfo")
+    }
+
+    watcherAttempt
+  }
+
+  /**
+    * Watch the Actor having sent the WorkerTypeOrder, it might be different from the other Worker & Leader in some cases
+    * @param context
+    * @param workerTypeOrder
+    * @return
+    */
+  def watchWorkerTypeOrder(context: ActorContext, workerTypeOrder: WorkerTypeOrder): Try[ActorRef] = {
+    // A watch can fail if the actor is failing just right now for example
+    // I don't know if watching multiple times is a problem
+    val watcherAttempt = Try {
+      context.watch(workerTypeOrder.actorRef)
+    }
+
+    watcherAttempt match {
+      case Success(res) =>
+      case Failure(err) => logger.error(s"Impossible to watch the sender of a WorkerTypeOrder: $workerTypeOrder")
     }
 
     watcherAttempt
@@ -104,9 +155,24 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
         work.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
         true
       case None =>
-        logger.debug("Failed ActorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        logger.debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
         false
     }
+  }
+
+  /**
+    * Check if the failed actor is linked to the initiator of a WorkerTypeOrder. If this is the case update the related
+    * orders.
+    * If the actorRef is linked to the initiator of a WorkerTypeOrder, remove it. If other sent the same order, no problem.
+    * If no-one is alive anymore, the LoadBalancer need to be in charge of stop the related actors.
+    */
+  def registerFailedWorkerOrderSender(actorRef: ActorRef): Unit = {
+    _orders.filter(_._2.actors.remove(actorRef))
+      .filter(_._2.actors.isEmpty)
+      .map(raw => {
+        logger.warn(s"There are no remaining initiators of the WorkerTypeOrder for WorkerTypeId ${raw._2.order.workerTypeId}, remove the order.")
+        _orders.remove(raw._1)
+      })
   }
 
   /**
@@ -114,15 +180,17 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * otherwise.
     * By having a failed WorkerLeader, it means that the status of any object beneath it is unknown, but we will most likely
     * also receive Terminated message and so on for each actor.
+
     */
   def registerFailedWorkerLeader(actorRef: ActorRef): Boolean = {
+    // Update the general information for the topology
     val workerLeader = Cluster.getWorkerManager(this, actorRef)
     workerLeader match {
       case Some(workLeader) =>
         workLeader.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
         true
       case None =>
-        logger.debug("Failed ActorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        logger.debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
         false
     }
   }
