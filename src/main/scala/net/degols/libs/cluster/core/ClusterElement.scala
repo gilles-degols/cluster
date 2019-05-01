@@ -6,7 +6,7 @@ package net.degols.libs.cluster.core
   * the classes directly monitored through Akka (WorkerLeader and Worker)
   */
 trait ClusterElement{
-  private var _statusHistory: List[ClusterElementStatus] = List(ClusterElementUnknown())
+  private var _statusHistory: Seq[ClusterElementStatus] = List(ClusterElementUnknown())
 
   def isUp: Boolean = !isDown
   def isDown: Boolean = isFailed
@@ -27,5 +27,5 @@ trait ClusterElement{
     _statusHistory = _statusHistory :+ clusterElementStatus
   }
 
-  def statusHistory(): List[ClusterElementStatus] = _statusHistory
+  def statusHistory(): Seq[ClusterElementStatus] = _statusHistory
 }

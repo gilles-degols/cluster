@@ -82,7 +82,7 @@ class ClusterConfiguration @Inject()(val defaultConfig: Config) {
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
     */
-  private def getStringList(path: String): List[String] = {
+  private def getStringList(path: String): Seq[String] = {
     config.getStringList(path).asScala.toList
   }
 }

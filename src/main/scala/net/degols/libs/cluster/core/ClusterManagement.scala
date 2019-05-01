@@ -67,7 +67,7 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
     cluster.cleanOldWorkers()
   }
 
-  def distributeWorkers(loadBalancers: List[LoadBalancer], softDistribution: Boolean): Unit = {
+  def distributeWorkers(loadBalancers: Seq[LoadBalancer], softDistribution: Boolean): Unit = {
     // Lookup to easily find the orders for a given workerType
     val orders = cluster.ordersByWorkerTypeId()
 

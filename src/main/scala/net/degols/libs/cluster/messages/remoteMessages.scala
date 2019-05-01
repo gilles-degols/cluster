@@ -175,7 +175,7 @@ case class RequestWorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteM
 @SerialVersionUID(1L)
 abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   // List of running workers (workerTypeId -> workerActorHealth).
-  var workerActors: Map[String, List[WorkerActorHealth]] = Map.empty[String, List[WorkerActorHealth]]
+  var workerActors: Map[String, Seq[WorkerActorHealth]] = Map.empty[String, Seq[WorkerActorHealth]]
 
   def prettyDisplay: String = {
     workerActors.map(workerInfo => {
@@ -186,10 +186,10 @@ abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMess
     }).mkString("\n")
   }
 
-  def getWorkerActors(workerTypeId: String): List[WorkerActorHealth] = workerActors.getOrElse(workerTypeId, List.empty[WorkerActorHealth])
+  def getWorkerActors(workerTypeId: String): Seq[WorkerActorHealth] = workerActors.getOrElse(workerTypeId, List.empty[WorkerActorHealth])
 
   def addWorkerActor(workerActorHealth: WorkerActorHealth): Unit = {
-    val workerList: List[WorkerActorHealth] = workerActors.get(workerActorHealth.workerTypeId) match {
+    val workerList: Seq[WorkerActorHealth] = workerActors.get(workerActorHealth.workerTypeId) match {
       case Some(workers) => workers.filterNot(_.workerActorRef == workerActorHealth.workerActorRef) :+ workerActorHealth // Filter the same WorkerActorHealth as the ClusterTopology update its information that way
       case None => List(workerActorHealth)
     }
@@ -224,10 +224,10 @@ case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef)
   * Contain various information about a WorkerActor
   */
 @SerialVersionUID(1L)
-case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, workerLeader: ActorRef, workerActorId: String) extends ClusterRemoteMessage(actorRef) {
+case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, workerLeader: ActorRef, workerActorId: String, orderId: String) extends ClusterRemoteMessage(actorRef) {
   def workerTypeId: String = workerTypeInfo.workerTypeId
 
-  private var _clusterRemoteMessages: List[ClusterRemoteMessage] = List.empty[ClusterRemoteMessage]
+  private var _clusterRemoteMessages: Seq[ClusterRemoteMessage] = List.empty[ClusterRemoteMessage]
 
   /**
     * Total number of processed messages (without ClusterRemoteMessage)

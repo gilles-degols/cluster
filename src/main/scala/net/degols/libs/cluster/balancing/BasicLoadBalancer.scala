@@ -47,7 +47,7 @@ class BasicLoadBalancer extends LoadBalancer {
 
   override def softWorkDistribution(workerType: WorkerType, workerTypeOrder: WorkerTypeOrder): Unit = {
     val nodes = clusterManagement.cluster.nodesForWorkerType(workerType)
-    val balancerType = workerTypeOrder.asInstanceOf[BasicLoadBalancerType]
+    val balancerType = workerTypeOrder.loadBalancerType.asInstanceOf[BasicLoadBalancerType]
 
     if(nodes.isEmpty) {
       logger.error(s"The WorkerType $workerType has no nodes available, no work distribution possible.")
@@ -61,7 +61,7 @@ class BasicLoadBalancer extends LoadBalancer {
     }
   }
 
-  private def softWorkDistributionPerJVM(workerType: WorkerType, workerTypeOrder: WorkerTypeOrder, nodes: List[Node], balancerType: BasicLoadBalancerType): Unit = {
+  private def softWorkDistributionPerJVM(workerType: WorkerType, workerTypeOrder: WorkerTypeOrder, nodes: Seq[Node], balancerType: BasicLoadBalancerType): Unit = {
     val wantedInstances = balancerType.instances
 
     nodes.flatMap(_.workerManagers.filter(_.isUp))
@@ -79,10 +79,10 @@ class BasicLoadBalancer extends LoadBalancer {
       })
   }
 
-  private def softWorkDistributionPerCluster(workerType: WorkerType, workerTypeOrder: WorkerTypeOrder, nodes: List[Node], balancerType: BasicLoadBalancerType): Unit = {
+  private def softWorkDistributionPerCluster(workerType: WorkerType, workerTypeOrder: WorkerTypeOrder, nodes: Seq[Node], balancerType: BasicLoadBalancerType): Unit = {
     val wantedInstances = balancerType.instances
 
-    val managerAndRunningInstances: Map[WorkerManager, List[Worker]] = nodes.flatMap(node => node.workerManagers.filter(_.isUp))
+    val managerAndRunningInstances: Map[WorkerManager, Seq[Worker]] = nodes.flatMap(node => node.workerManagers.filter(_.isUp))
       .map(workerManager => workerManager -> workerManager.workerTypes.filter(_ == workerType).flatMap(_.workers.filter(_.isUp).filter(_.orderId == workerTypeOrder.id))).toMap
     val runningInstances = managerAndRunningInstances.values.flatten.size
     if(managerAndRunningInstances.keys.isEmpty) {

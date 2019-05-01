@@ -172,7 +172,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
         // Setting a watcher can lead to failure if the actors just die at that moment
         Try{context.watch(res)} match {
           case Success(s) =>
-            val workerActorHealth = WorkerActorHealth(context.self, message.workerTypeInfo, res, nodeInfo.get, context.self, message.workerId)
+            val workerActorHealth = WorkerActorHealth(context.self, message.workerTypeInfo, res, nodeInfo.get, context.self, message.workerId, message.orderId)
             jvmTopology.addWorkerActor(workerActorHealth)
             val m = StartedWorkerActor(context.self, message, res)
             m.nodeInfo = nodeInfo.get

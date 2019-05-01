@@ -15,7 +15,7 @@ object ClusterTools {
 
   def difference(otherDatetime: DateTime): Long = otherDatetime.getMillis - datetime().getMillis
 
-  def formatStacktrace(exception: Throwable, keepPackages: List[String] = List.empty[String]): String = {
+  def formatStacktrace(exception: Throwable, keepPackages: Seq[String] = List.empty[String]): String = {
     val sw = new StringWriter()
     exception.printStackTrace(new PrintWriter(sw))
     sw.toString

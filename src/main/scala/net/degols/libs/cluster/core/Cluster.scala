@@ -35,7 +35,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
   /**
     * All instances of Nodes found on the cluster
     */
-  private var _nodes: List[Node] = List.empty[Node]
+  private var _nodes: Seq[Node] = List.empty[Node]
 
   /**
     * When we receive a WorkerTypeInfo, we store the information (if not already done), which include the related
@@ -65,7 +65,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * WorkerTypeId as different orders could come from multiple JVMs
     * @return
     */
-  def ordersByWorkerTypeId(): Map[String, List[WorkerTypeOrder]] = {
+  def ordersByWorkerTypeId(): Map[String, Seq[WorkerTypeOrder]] = {
     _orders.groupBy(_._2.order.workerTypeId).map(raw => raw._1 -> raw._2.values.map(_.order).toList)
   }
 
@@ -263,12 +263,12 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     }
   }
 
-  def nodesByWorkerType(): Map[WorkerType, List[Node]] = {
+  def nodesByWorkerType(): Map[WorkerType, Seq[Node]] = {
     nodes.flatMap(node => node.workerManagers.flatMap(_.workerTypes.map(step => (node, step))))
       .groupBy(_._2).map(raw => raw._1 -> raw._2.map(_._1))
   }
 
-  def nodesForWorkerType(workerType: WorkerType): List[Node] = {
+  def nodesForWorkerType(workerType: WorkerType): Seq[Node] = {
     nodesByWorkerType().getOrElse(workerType, List.empty[Node])
   }
 
@@ -295,7 +295,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     }
   }
 
-  def nodes: List[Node] = _nodes
+  def nodes: Seq[Node] = _nodes
 
   /**
     * Reconstruct the structure of Cluster and its objects based on a given ClusterTopology.
@@ -314,12 +314,21 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
   }
 
   override def toString: String = {
+    // WorkerTypeId -> List(orders)
+    val orders: Map[String, Seq[WorkerTypeOrderWrapper]] = _orders.groupBy(_._2.order.workerTypeId).map(raw => raw._1 -> raw._2.values.toList)
+
     nodes.flatMap(node => {
       val nodeText: String = s"Node: ${node.hostname}"
       node.workerManagers.map(workerManager => {
         val workerManagerText: String = s"$nodeText - port: ${workerManager.port}"
         val workerTypeTexts: String = workerManager.workerTypes.map(workerType => {
-          val workerTypeText: String = s"\t${workerType.id} - ${workerType.workerTypeInfo.loadBalancerType} -"
+          // Go through every order for the given workerType
+          val prettyOrders = orders.getOrElse(workerType.workerTypeInfo.workerTypeId, List.empty[WorkerTypeOrderWrapper])
+              .map(order => {
+                s"${order.order.loadBalancerType}"
+              }).mkString(", ")
+
+          val workerTypeText: String = s"\t${workerType.id} - orders: ${prettyOrders} -"
           val workerTexts = workerType.workers.map(worker => worker.status.toString).groupBy(status => status).map(status => s"${status._1}: ${status._2.size}").mkString(", ")
           s"$workerTypeText $workerTexts"
         }).mkString("\n")

@@ -20,7 +20,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
   /**
     * All pipeline steps of the running system
     */
-  private var _workerTypes: List[WorkerType] = List.empty[WorkerType]
+  private var _workerTypes: Seq[WorkerType] = List.empty[WorkerType]
 
   /**
     * Add a worker type we received from another JVM, if it does not exist yet
@@ -61,7 +61,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
   /**
     * Return the pipeline steps we have
     */
-  def workerTypes: List[WorkerType] = _workerTypes
+  def workerTypes: Seq[WorkerType] = _workerTypes
 
   /**
     * The port should normally be unique on the same node

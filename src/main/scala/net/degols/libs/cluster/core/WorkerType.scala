@@ -9,7 +9,7 @@ import net.degols.libs.cluster.messages.{ClusterTopology, InstanceType, NodeInfo
   * @param id
   */
 class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
-  private var _workers: List[Worker] = List.empty[Worker]
+  private var _workers: Seq[Worker] = List.empty[Worker]
 
   /**
     * Remove any worker not put as "running" after x seconds, also remove the "failed" workers.
@@ -38,7 +38,7 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
     }
   }
 
-  def workers: List[Worker] = _workers
+  def workers: Seq[Worker] = _workers
 
   def canEqual(a: Any): Boolean = a.isInstanceOf[WorkerType]
   override def equals(that: Any): Boolean =
@@ -64,7 +64,8 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
       val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId, workerActorHealth.workerTypeInfo)
       rawWorkerType == this
     }).foreach(workerActorHealth => {
-      val rawWorker = new Worker(workerActorHealth.workerActorId, Option(workerActorHealth.workerActorRef))
+      val orderId = workerActorHealth.orderId
+      val rawWorker = new Worker(workerActorHealth.workerActorId, orderId, Option(workerActorHealth.workerActorRef))
       addWorker(rawWorker)
     })
 

@@ -16,7 +16,7 @@ class Node(val hostname: String) {
   /**
     * All instances of WorkerManager found on the cluster
     */
-  private var _workerManagers: List[WorkerManager] = List.empty[WorkerManager]
+  private var _workerManagers: Seq[WorkerManager] = List.empty[WorkerManager]
 
   /**
     * Add a workerManager we received from another JVM, only if not already present. Return the inserted WorkerManager, or the previously
@@ -32,7 +32,7 @@ class Node(val hostname: String) {
     }
   }
 
-  def workerManagers: List[WorkerManager] = _workerManagers
+  def workerManagers: Seq[WorkerManager] = _workerManagers
 
 
 

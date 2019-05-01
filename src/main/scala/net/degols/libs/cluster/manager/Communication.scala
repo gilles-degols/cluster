@@ -17,7 +17,7 @@ case class RemoteReply(content: Any)
 class Communication(service: ClusterServiceLeader) {
   private val logger = LoggerFactory.getLogger(getClass)
 
-  def actorRefsForId(workerTypeId: String): List[ActorRef] = {
+  def actorRefsForId(workerTypeId: String): Seq[ActorRef] = {
     service._clusterTopology match {
       case None =>
         logger.error("ClusterTopology not yet available.")
@@ -29,7 +29,7 @@ class Communication(service: ClusterServiceLeader) {
 
   def sendWithReply(sender: ActorRef, workerTypeId: String, message: Any)(implicit timeout: Timeout): Try[RemoteReply] = Try {
     var result: Try[RemoteReply] = Failure(new Exception("Method not called"))
-    val actorRefs: List[ActorRef] = actorRefsForId(workerTypeId)
+    val actorRefs: Seq[ActorRef] = actorRefsForId(workerTypeId)
 
     if(actorRefs.nonEmpty) {
       // Simply take one at random. If we want to do smarter load balancing, you need to handle it yourselves

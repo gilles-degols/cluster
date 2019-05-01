@@ -76,7 +76,10 @@ class ClusterLeaderActor @Inject()(
     super.preStart()
 
     // Put the reference to ClusterServiceLeader for each PackageLeader
-    componentLeaderApi.packageLeaders.foreach(_.setClusterServiceLeader(service))
+    componentLeaderApi.packageLeaders.foreach(pck => {
+      pck.setContext(context)
+      pck.setClusterServiceLeader(service)
+    })
 
     // Inform the localManager of our existence and give the optional UserLoadBalancer objects
     localManager ! IAmTheWorkerLeader(componentLeaderApi.loadBalancers)

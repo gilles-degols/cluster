@@ -50,7 +50,7 @@ final class Manager @Inject()(electionService: ElectionService,
     * Custom User LoadBalancer, they do not need to exist, it's just for advanced users. They can be set by the workerLeader once
     * it's initialized.
     */
-  protected var userLoadBalancers: List[LoadBalancer] = List.empty[LoadBalancer]
+  protected var userLoadBalancers: Seq[LoadBalancer] = List.empty[LoadBalancer]
 
   /**
     * All available load balancers, the one proposed by default + the user one.
