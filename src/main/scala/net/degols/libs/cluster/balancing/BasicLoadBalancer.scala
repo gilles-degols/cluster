@@ -73,7 +73,7 @@ class BasicLoadBalancer extends LoadBalancer {
           logger.info(s"Starting ${wantedInstances - i} instances of $workerType on $this")
         }
         while(i < wantedInstances) {
-          workerManager.startWorker(context, workerType, workerTypeOrder.id)
+          workerManager.startWorker(context, workerType, workerTypeOrder)
           i += 1
         }
       })
@@ -98,7 +98,7 @@ class BasicLoadBalancer extends LoadBalancer {
         var i = runningInstances
         while(i < wantedInstances) {
           val workerManager = Random.shuffle(availableManagers).head
-          workerManager._1.startWorker(context, workerType, workerTypeOrder.id)
+          workerManager._1.startWorker(context, workerType, workerTypeOrder)
           i += 1
         }
       }

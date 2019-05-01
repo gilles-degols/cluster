@@ -2,8 +2,10 @@ package net.degols.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
 import net.degols.libs.cluster.ClusterTools
-import net.degols.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo}
+import net.degols.libs.cluster.manager.WorkerOrder
+import net.degols.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.{Logger, LoggerFactory}
+import play.api.libs.json.JsObject
 
 import scala.util.{Failure, Success, Try}
 
@@ -39,21 +41,21 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
     * Ask the distant actor to launch a specific instance of given WorkerType. This communication is async but we create
     * a related Worker locally to remember that we just ask for it to launch
     */
-  def startWorker(context: ActorContext, workerType: WorkerType, orderId: String): Unit = {
+  def startWorker(context: ActorContext, workerType: WorkerType, workerTypeOrder: WorkerTypeOrder): Unit = {
     workerTypes.find(_ == workerType) match {
       case None => logger.error(s"No WorkerType $workerType found in $this. Not possible to start worker.")
       case Some(w) =>
         val workerId = Worker.generateWorkerId(workerType.workerTypeInfo)
         Try {
-          actorRef ! StartWorkerActor(context.self, workerType.workerTypeInfo, workerId, orderId)
+          actorRef ! StartWorkerActor(context.self, workerType.workerTypeInfo, workerTypeOrder, workerId)
         } match {
           case Success(res) =>
             // We still don't know if the actor is correctly started or not, but we must avoid creating a new one for the next soft distribution.
-            val worker = Worker.fromWorkerIdAndActorRef(workerId, orderId, None)
+            val worker = Worker.fromWorkerIdAndActorRef(workerId, workerTypeOrder.id, None)
             worker.setStatus(ClusterElementStarting())
             w.addWorker(worker)
           case Failure(err) =>
-            logger.warn(s"Impossible to send a StartWorkerActor to $this for WorkerType: ${workerType}")
+            logger.warn(s"Impossible to send a StartWorkerActor to $this for WorkerType: ${workerType}", err)
         }
     }
   }
@@ -80,6 +82,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
   def reconstructFromClusterTopology(clusterTopology: ClusterTopology, currentNode: Node): Unit = {
     _workerTypes = List.empty[WorkerType]
 
+    // TODO: Pretty sure this code has not been tested and will not directly work as expected. To improve
     clusterTopology.workerActors.values.flatten.filter(workerActorHealth => {
       val rawNode = Node.fromNodeInfo(workerActorHealth.nodeInfo)
       // We only keep WorkerManagers for the current node

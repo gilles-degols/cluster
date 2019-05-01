@@ -124,7 +124,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.actorRef, startedWorkerActor.nodeInfo)
     Cluster.getWorkerFromWorkerId(this, startedWorkerActor.startWorkerActor.workerId, startedWorkerActor.jvmId) match {
       case Some(previousWorker) =>
-        val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.orderId, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
+        val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.workerTypeOrder.id, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
         worker.setStatus(ClusterElementRunning())
       case None =>
         logger.error("We got a StartedWorkerActor which was already removed from the local topology. TODO: We should solve this bug")
@@ -141,7 +141,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     */
   def registerFailedWorkerActor(clusterTopology: ClusterTopology, failedWorkerActor: FailedWorkerActor): Unit = {
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.actorRef, failedWorkerActor.nodeInfo)
-    val worker = Cluster.getAndAddWorker(this, workerTypeInfo, failedWorkerActor.startWorkerActor.orderId, failedWorkerActor.startWorkerActor.workerId, None)
+    val worker = Cluster.getAndAddWorker(this, workerTypeInfo, failedWorkerActor.startWorkerActor.workerTypeOrder.id, failedWorkerActor.startWorkerActor.workerId, None)
     worker.setStatus(ClusterElementFailed(failedWorkerActor.exception))
 
     // We also need to update the ClusterTopology directly

@@ -39,9 +39,10 @@ case object ClusterInstance extends InstanceType
   * @param metadata any specific information about the WorkerTypeInfo. Useful to create homemade load balancer using
   *                 those metadata information to correctly distribute the load. For example, for Filesgate, it's useful
   *                 to know what kind of PipelineStep we have.
+  *                 Stringified json
   */
 @SerialVersionUID(1L)
-case class WorkerTypeOrder(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType, id: String, metadata: JsObject = Json.obj()) extends ClusterRemoteMessage(actorRef){
+case class WorkerTypeOrder(actorRef: ActorRef, workerTypeId: String, loadBalancerType: LoadBalancerType, id: String, metadata: String) extends ClusterRemoteMessage(actorRef){
   /**
     * Automatically added by the WorkerLeader when it sends its info.
     * This does not means this WorkerTypeInfo can have the related actor started on the nodeInfo
@@ -58,9 +59,10 @@ case class WorkerTypeOrder(actorRef: ActorRef, workerTypeId: String, loadBalance
   * You need to provide the appropriate LoadBalancer information
   * @param actorRef the one from the current WorkerLeader
   * @param workerTypeId unique id of the WorkerActor to differentiate them
+  * @param metadata stringified json
   */
 @SerialVersionUID(1L)
-case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, metadata: JsObject = Json.obj()) extends ClusterRemoteMessage(actorRef){
+case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, metadata: String) extends ClusterRemoteMessage(actorRef){
   /**
     * Automatically added by the WorkerLeader when it sends its info.
     * This does not means this WorkerTypeInfo can have the related actor started on the nodeInfo
@@ -87,8 +89,8 @@ object WorkerTypeInfo {
   * @param actorRef
   */
 @SerialVersionUID(1L)
-case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerId: String, orderId: String) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId / $orderId @ $creationDatetime"
+case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerTypeOrder: WorkerTypeOrder, workerId: String) extends ClusterRemoteMessage(actorRef){
+  override def toString: String = s"StartWorkerActor: ${workerTypeInfo.workerTypeId} / $actorRef / $workerId / ${workerTypeOrder.id} @ $creationDatetime"
 }
 
 /**

@@ -7,10 +7,19 @@ import net.degols.libs.cluster.ClusterTools
 import net.degols.libs.cluster.messages.{ClusterRemoteMessage, ClusterTopology, FailedWorkerActor, JVMTopology, NodeInfo, StartWorkerActor, StartedWorkerActor, WorkerActorHealth, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.LoggerFactory
 import akka.pattern.ask
-import scala.concurrent.duration._
+import play.api.libs.json.{JsObject, Json}
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Random, Success, Try}
+
+/**
+  * Local object used to communicate with the developer, asking him to start a specific worker
+  * @param infoMetadata Information that can be sent when we indicate the different WorkerInfo we have in a package
+  * @param orderMetadata Information that can be sent when we order a specific worker to start
+  * @param initialMessage The Initial message received by the cluster library. Might be useful in some cases
+  */
+case class StartWorkerWrapper(shortName: String, actorName: String, infoMetadata: JsObject, orderMetadata: JsObject, initialMessage: StartWorkerActor)
 
 /**
   * Contain tools to communicate with the Manager of the cluster. Typically useful to send WorkerOrder
@@ -70,7 +79,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
         // Unless the developer really knows what he is doing
         s"${workerOrder.fullName}_default"
     }
-    WorkerTypeOrder(context.self, workerOrder.fullName, workerOrder.balancerType, orderId, workerOrder.metadata)
+    WorkerTypeOrder(context.self, workerOrder.fullName, workerOrder.balancerType, orderId, workerOrder.metadata.toString())
   }
 
   /**
@@ -79,7 +88,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
   private def convertWorkerInfo(componentName: String, packageName: String, workerInfo: WorkerInfo)(implicit context: ActorContext): WorkerTypeInfo = {
     //WorkerTypeOrder(context.self, workerOrder.fullName, workerOrder.balancerType, orderId, workerOrder.metadata)
     val fullName = Communication.fullActorName(componentName, packageName, workerInfo.shortName)
-    WorkerTypeInfo(context.self, fullName, workerInfo.metadata)
+    WorkerTypeInfo(context.self, fullName, workerInfo.metadata.toString())
   }
 
   /**
@@ -167,12 +176,13 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
     val workerName = s"${message.workerTypeInfo.workerTypeId}-$startedWorkers"
     startedWorkers += 1
 
-    Try{packageLeaderApi.startWorker(initialName, workerName)} match {
+    val wrapper = StartWorkerWrapper(initialName, workerName, Json.parse(message.workerTypeInfo.metadata).as[JsObject], Json.parse(message.workerTypeOrder.metadata).as[JsObject], message)
+    Try{packageLeaderApi.startWorker(wrapper)} match {
       case Success(res) =>
         // Setting a watcher can lead to failure if the actors just die at that moment
         Try{context.watch(res)} match {
           case Success(s) =>
-            val workerActorHealth = WorkerActorHealth(context.self, message.workerTypeInfo, res, nodeInfo.get, context.self, message.workerId, message.orderId)
+            val workerActorHealth = WorkerActorHealth(context.self, message.workerTypeInfo, res, nodeInfo.get, context.self, message.workerId, message.workerTypeOrder.id)
             jvmTopology.addWorkerActor(workerActorHealth)
             val m = StartedWorkerActor(context.self, message, res)
             m.nodeInfo = nodeInfo.get

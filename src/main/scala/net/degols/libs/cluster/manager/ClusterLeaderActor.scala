@@ -22,7 +22,7 @@ case object IsStillDisconnectedFromManager
 /**
   * Local class instantiated by the developer to give information about each Worker to start.
   * @param shortName short version of the full WorkerTypeId. Automatically the full WorkerTypeId will be computed the
-  *                  following way s"$COMPONENT:$PACKAGE:$shortName"
+  *                  following way s"$COMPONENT:$PACKAGE:$shortName".
   * @param balancerType indicates how to balance the actors of the given type. If present, the related order to start
   *                 the Workers for the WorkerInfo will be automatically sent.
   *                 If not provided, the developer needs to manually send WorkerOrder to the manager to start them

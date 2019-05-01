@@ -14,9 +14,8 @@ trait PackageLeaderApi {
 
   /**
     * We start the related actor
-    * @param shortName
     */
-  def startWorker(shortName: String, actorName: String): ActorRef
+  def startWorker(work: StartWorkerWrapper): ActorRef
 
 
   /**
