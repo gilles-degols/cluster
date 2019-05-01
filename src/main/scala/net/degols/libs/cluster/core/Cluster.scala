@@ -1,8 +1,7 @@
 package net.degols.libs.cluster.core
 
 import javax.inject.Singleton
-
-import akka.actor.{ActorContext, ActorRef}
+import akka.actor.{ActorContext, ActorRef, ActorSystem}
 import com.google.inject.Inject
 import net.degols.libs.cluster.ClusterConfiguration
 import net.degols.libs.cluster.messages._
@@ -11,6 +10,11 @@ import org.slf4j.{Logger, LoggerFactory}
 import scala.util.{Failure, Random, Success, Try}
 import scala.collection.mutable
 
+/**
+  *
+  * @param order
+  * @param actors Set of actors initiating the orders. Those are NOT the workers themselves
+  */
 case class WorkerTypeOrderWrapper(order: WorkerTypeOrder, actors: mutable.Set[ActorRef])
 
 /**
@@ -120,7 +124,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.actorRef, startedWorkerActor.nodeInfo)
     Cluster.getWorkerFromWorkerId(this, startedWorkerActor.startWorkerActor.workerId, startedWorkerActor.jvmId) match {
       case Some(previousWorker) =>
-        val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
+        val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.orderId, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
         worker.setStatus(ClusterElementRunning())
       case None =>
         logger.error("We got a StartedWorkerActor which was already removed from the local topology. TODO: We should solve this bug")
@@ -137,7 +141,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     */
   def registerFailedWorkerActor(clusterTopology: ClusterTopology, failedWorkerActor: FailedWorkerActor): Unit = {
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(failedWorkerActor.startWorkerActor.workerTypeInfo, failedWorkerActor.actorRef, failedWorkerActor.nodeInfo)
-    val worker = Cluster.getAndAddWorker(this, workerTypeInfo, failedWorkerActor.startWorkerActor.workerId, None)
+    val worker = Cluster.getAndAddWorker(this, workerTypeInfo, failedWorkerActor.startWorkerActor.orderId, failedWorkerActor.startWorkerActor.workerId, None)
     worker.setStatus(ClusterElementFailed(failedWorkerActor.exception))
 
     // We also need to update the ClusterTopology directly
@@ -161,16 +165,33 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
   }
 
   /**
+    * Kill all actors which were related to a specific workerTypeOrder
+    * @param workerTypeOrderWrapper
+    */
+  private def killActorsForOrder(context: ActorContext, workerTypeOrderWrapper: WorkerTypeOrderWrapper): Unit = {
+    // TODO: There is no retry attempt for this system, we expect all messages to go through
+    val order = workerTypeOrderWrapper.order
+    _nodes.flatMap(_.workerManagers)
+        .flatMap(_.workerTypes.filter(_.workerTypeInfo.workerTypeId == order.workerTypeId))
+        .flatMap(_.workers.filter(_.orderId == order.id))
+        .foreach(worker => {
+          logger.info(s"Asking the actor ${worker.actorRef} to kill itself as it belongs to WorkerTypeId ${order.workerTypeId} and we must all workers belonging to the orderId ${order.id}")
+          worker.actorRef.foreach(actorRef => actorRef ! KillWorkerActor(context.self))
+        })
+  }
+
+  /**
     * Check if the failed actor is linked to the initiator of a WorkerTypeOrder. If this is the case update the related
     * orders.
     * If the actorRef is linked to the initiator of a WorkerTypeOrder, remove it. If other sent the same order, no problem.
-    * If no-one is alive anymore, the LoadBalancer need to be in charge of stop the related actors.
+    * If no WorkerOrder is alive anymore (for the same id), the related workers will be directly removed.
     */
-  def registerFailedWorkerOrderSender(actorRef: ActorRef): Unit = {
+  def registerFailedWorkerOrderSender(context: ActorContext, actorRef: ActorRef): Unit = {
     _orders.filter(_._2.actors.remove(actorRef))
       .filter(_._2.actors.isEmpty)
       .map(raw => {
-        logger.warn(s"There are no remaining initiators of the WorkerTypeOrder for WorkerTypeId ${raw._2.order.workerTypeId}, remove the order.")
+        logger.warn(s"There are no remaining initiators of the WorkerTypeOrder for WorkerTypeId ${raw._2.order.workerTypeId}, remove the order and ask for the killing of the related actors.")
+        killActorsForOrder(context, raw._2)
         _orders.remove(raw._1)
       })
   }
@@ -180,7 +201,6 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * otherwise.
     * By having a failed WorkerLeader, it means that the status of any object beneath it is unknown, but we will most likely
     * also receive Terminated message and so on for each actor.
-
     */
   def registerFailedWorkerLeader(actorRef: ActorRef): Boolean = {
     // Update the general information for the topology
@@ -357,9 +377,9 @@ object Cluster {
     * starting the job, so you will have strange behavior!
     * @return
     */
-  def getAndAddWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo,  workerId: String, workerActorRef: Option[ActorRef]): Worker = {
+  def getAndAddWorker(cluster: Cluster, workerTypeInfo: WorkerTypeInfo, orderId: String, workerId: String, workerActorRef: Option[ActorRef]): Worker = {
     val workerType = Cluster.getAndAddWorkerType(cluster, workerTypeInfo)
-    val rawWorker = Worker.fromWorkerIdAndActorRef(workerId, workerActorRef)
+    val rawWorker = Worker.fromWorkerIdAndActorRef(workerId, orderId, workerActorRef)
     workerType.addWorker(rawWorker, replace = true)
   }
 

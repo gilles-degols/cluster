@@ -4,7 +4,7 @@ import java.io.File
 
 import com.google.inject.Inject
 import com.typesafe.config.{Config, ConfigFactory}
-import net.degols.libs.cluster.Tools.runCommand
+import net.degols.libs.cluster.ClusterTools.runCommand
 import org.slf4j.LoggerFactory
 
 import collection.JavaConverters._
@@ -46,7 +46,7 @@ class ClusterConfiguration @Inject()(val defaultConfig: Config) {
     */
   val clusterConfig: Config = config.getConfig("cluster")
 
-  lazy val localHostname: String = Tools.runCommand("hostname")
+  lazy val localHostname: String = ClusterTools.runCommand("hostname")
 
   /**
     * A watcher might not receive any message back from an ElectionActor directly. Or we want to allow a nice switch

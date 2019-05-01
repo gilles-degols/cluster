@@ -2,7 +2,7 @@ package net.degols.libs.cluster.messages
 
 import akka.actor.ActorRef
 import com.typesafe.config.Config
-import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.ClusterTools
 import net.degols.libs.cluster.balancing.BasicLoadBalancerType
 import net.degols.libs.cluster.core.Node
 import net.degols.libs.election.{RemoteMessage, SimpleRemoteMessage}
@@ -48,7 +48,7 @@ case class WorkerTypeOrder(actorRef: ActorRef, workerTypeId: String, loadBalance
     */
   var nodeInfo: NodeInfo = _
 
-  override val toString: String = s"WorkerTypeOrder ($id): $workerTypeId / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+  override val toString: String = s"WorkerTypeOrder ($id): $workerTypeId / ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -67,7 +67,7 @@ case class WorkerTypeInfo(actorRef: ActorRef, workerTypeId: String, metadata: Js
     */
   var nodeInfo: NodeInfo = _
 
-  override val toString: String = s"WorkerTypeInfo: $workerTypeId / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+  override val toString: String = s"WorkerTypeInfo: $workerTypeId / ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -98,7 +98,7 @@ case class StartWorkerActor(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, 
 @SerialVersionUID(1L)
 case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, runningActorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
   var nodeInfo: NodeInfo = _
-  override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerId} - ${startWorkerActor.workerTypeInfo.workerTypeId} / ${Tools.remoteActorPath(runningActorRef)} @ $creationDatetime"
+  override def toString: String = s"StartedWorkerActor: ${startWorkerActor.workerId} - ${startWorkerActor.workerTypeInfo.workerTypeId} / ${ClusterTools.remoteActorPath(runningActorRef)} @ $creationDatetime"
 }
 
 /**
@@ -110,7 +110,7 @@ case class StartedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerA
 @SerialVersionUID(1L)
 case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerActor, exception: Exception) extends ClusterRemoteMessage(actorRef){
   var nodeInfo: NodeInfo = _
-  override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+  override def toString: String = s"FailedWorkerActor: ${startWorkerActor.workerTypeInfo.workerTypeId} / ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -120,7 +120,7 @@ case class FailedWorkerActor(actorRef: ActorRef, startWorkerActor: StartWorkerAc
   */
 @SerialVersionUID(1L)
 case class KillWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"KillWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+  override def toString: String = s"KillWorkerActor: ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -143,12 +143,12 @@ case class PauseWorkerActor(actorRef: ActorRef, timeInMilliSeconds: Option[Long]
       case Some(breakTime) =>
         val startTime: Long = if(timeSinceCreation) creationDatetime.getMillis
         else if(handlingTime.isDefined) handlingTime.get
-        else Tools.datetime().getMillis // Message not yet handled, it means we are not yet in pause
+        else ClusterTools.datetime().getMillis // Message not yet handled, it means we are not yet in pause
 
-        startTime + breakTime < Tools.datetime().getMillis
+        startTime + breakTime < ClusterTools.datetime().getMillis
     }
   }
-  override def toString: String = s"PauseWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime during ${timeInMilliSeconds}"
+  override def toString: String = s"PauseWorkerActor: ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime during ${timeInMilliSeconds}"
 }
 
 /**
@@ -157,7 +157,7 @@ case class PauseWorkerActor(actorRef: ActorRef, timeInMilliSeconds: Option[Long]
   */
 @SerialVersionUID(1L)
 case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef){
-  override def toString: String = s"ResumeWorkerActor: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+  override def toString: String = s"ResumeWorkerActor: ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -166,7 +166,7 @@ case class ResumeWorkerActor(actorRef: ActorRef) extends ClusterRemoteMessage(ac
   */
 @SerialVersionUID(1L)
 case class RequestWorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef) {
-  override def toString: String = s"RequestWorkerActorTopology: ${Tools.remoteActorPath(actorRef)} @ $creationDatetime"
+  override def toString: String = s"RequestWorkerActorTopology: ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
 /**
@@ -244,9 +244,9 @@ case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo,
     */
   private var _lastFailedMessage: Option[(DateTime, Any)] = None
 
-  def setLastSuccessfulMessage(message: Any): Unit = _lastSuccessfulMessage = Option(Tools.datetime(), message)
+  def setLastSuccessfulMessage(message: Any): Unit = _lastSuccessfulMessage = Option(ClusterTools.datetime(), message)
 
-  def setLastFailedMessage(message: Any): Unit = _lastFailedMessage = Option(Tools.datetime(), message)
+  def setLastFailedMessage(message: Any): Unit = _lastFailedMessage = Option(ClusterTools.datetime(), message)
 
   def incrementProcessedMessages(value: Long = 0): Unit = _processedMessages += value
 

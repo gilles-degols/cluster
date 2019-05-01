@@ -10,7 +10,7 @@ import sys.process._
 /**
   * Created by Gilles.Degols on 04-09-18.
   */
-object Tools {
+object ClusterTools {
   def datetime(): DateTime = new DateTime().withZone(DateTimeZone.UTC)
 
   def difference(otherDatetime: DateTime): Long = otherDatetime.getMillis - datetime().getMillis
@@ -26,7 +26,7 @@ object Tools {
     * @param actorRef
     */
   def remoteActorPath(actorRef: ActorRef): String = {
-    var path = akka.serialization.Serialization.serializedActorPath(actorRef).split("#").head
+    val path = akka.serialization.Serialization.serializedActorPath(actorRef).split("#").head
     if(!path.contains("@")) {
       throw new Exception(s"Missing configuration to have a valid remote actor path for $actorRef.")
     }

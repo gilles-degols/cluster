@@ -4,7 +4,7 @@ import akka.actor.{ActorContext, ActorRef}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.messages._
 import net.degols.libs.election.Tools
-import net.degols.libs.cluster.{Tools => ClusterTools}
+import net.degols.libs.cluster.{ClusterTools => ClusterTools}
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success, Try}
@@ -54,7 +54,6 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
 
   /**
     * From time to time we can receive an update on the health of a given WorkerActor.
-    * @param failedWorkerActor
     */
   def updateWorkerActorHealth(workerActorHealth: WorkerActorHealth): Unit = {
     cluster.updateWorkerActorHealth(_clusterTopology, workerActorHealth)
@@ -81,7 +80,13 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
 
         if(ordersForType.size >= 2) {
           logger.info(s"We have ${ordersForType.size} different orders for ${workerType.workerTypeInfo.workerTypeId}")
-        }
+        } else if (ordersForType.isEmpty)(
+          // We cannot simply stop all related actors, as we also need to handle the lost of specific orders, in that
+          // case we need to specifically target actors related to the lost orders. Because of that, we directly stop
+          // the actors of a related workOrder as soon as we received the Terminated message
+          logger.warn(s"There is no remaining orders for ${workerType.workerTypeInfo.workerTypeId}, normally no related" +
+            s" actors should exist anymore (to verify).")
+        )
 
         ordersForType
       })
@@ -122,10 +127,10 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
     * message automatically sends every few seconds.
     *
     * If the actorRef is linked to the initiator of a WorkerTypeOrder, remove it. If other sent the same order, no problem.
-    * If no-one is alive anymore, the LoadBalancer need to be in charge of stop the related actors.
+    * If no-one is alive anymore, the Cluster will directly remove the related actors
     */
   def removeWatchedActor(actorRef: ActorRef): Unit = {
-    cluster.registerFailedWorkerOrderSender(actorRef)
+    cluster.registerFailedWorkerOrderSender(context, actorRef)
 
     if(!cluster.registerFailedWorkerActor(actorRef)) {
       cluster.registerFailedWorkerLeader(actorRef)

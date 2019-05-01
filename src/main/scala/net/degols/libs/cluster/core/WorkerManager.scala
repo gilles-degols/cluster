@@ -1,7 +1,7 @@
 package net.degols.libs.cluster.core
 
 import akka.actor.{ActorContext, ActorRef}
-import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.ClusterTools
 import net.degols.libs.cluster.messages.{ClusterTopology, NodeInfo, StartWorkerActor, WorkerTypeInfo}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -67,7 +67,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
     * The port should normally be unique on the same node
     * @return
     */
-  def port: String = Tools.remoteActorPath(actorRef).split("/")(2).split(":").last
+  def port: String = ClusterTools.remoteActorPath(actorRef).split("/")(2).split(":").last
 
   def canEqual(a: Any): Boolean = a.isInstanceOf[WorkerManager]
   override def equals(that: Any): Boolean =

@@ -1,6 +1,6 @@
 package net.degols.libs.cluster.core
 
-import net.degols.libs.cluster.Tools
+import net.degols.libs.cluster.ClusterTools
 import net.degols.libs.cluster.messages.{ClusterTopology, InstanceType, NodeInfo, WorkerTypeInfo}
 
 /**
@@ -20,7 +20,7 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
     // Remove failed workers (not the "paused" one)
     _workers = _workers.filterNot(worker => worker.isFailed)
     // Remove worker stucked in the "started" state for too long
-    _workers = _workers.filterNot(worker => worker.isStarting && Math.abs(Tools.difference(worker.status.creationDatetime)) > timeout)
+    _workers = _workers.filterNot(worker => worker.isStarting && Math.abs(ClusterTools.difference(worker.status.creationDatetime)) > timeout)
   }
 
   def addWorker(rawWorker: Worker, replace: Boolean = false): Worker = {
