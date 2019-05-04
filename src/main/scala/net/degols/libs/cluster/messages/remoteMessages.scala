@@ -226,7 +226,7 @@ case class JVMTopology(actorRef: ActorRef) extends WorkerActorTopology(actorRef)
   * Contain various information about a WorkerActor
   */
 @SerialVersionUID(1L)
-case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerActorRef: ActorRef, nodeInfo: NodeInfo, workerLeader: ActorRef, workerActorId: String, orderId: String) extends ClusterRemoteMessage(actorRef) {
+case class WorkerActorHealth(actorRef: ActorRef, workerTypeInfo: WorkerTypeInfo, workerTypeOrder: WorkerTypeOrder, workerActorRef: ActorRef, nodeInfo: NodeInfo, workerLeader: ActorRef, workerActorId: String) extends ClusterRemoteMessage(actorRef) {
   def workerTypeId: String = workerTypeInfo.workerTypeId
 
   private var _clusterRemoteMessages: Seq[ClusterRemoteMessage] = List.empty[ClusterRemoteMessage]

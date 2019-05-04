@@ -129,15 +129,20 @@ final class Manager @Inject()(electionService: ElectionService,
   def handleClusterMessage(rawMessage: ClusterRemoteMessage): Unit = {
     rawMessage match {
       case message: WorkerTypeInfo =>
+        logger.debug(s"Register WorkerTypeInfo: $message")
         clusterManagement.registerWorkerTypeInfo(message)
       case message: WorkerTypeOrder =>
+        logger.debug(s"Register WorkerTypeOrder: $message")
         clusterManagement.registerWorkerTypeOrder(message)
       case message: WorkerActorHealth =>
+        logger.debug(s"Register WorkerActorHealth: $message")
         clusterManagement.updateWorkerActorHealth(message)
       case message: StartedWorkerActor =>
+        logger.debug(s"Register StartedWorkerActor: $message")
         clusterManagement.registerStartedWorkerActor(message)
         clusterManagement.sendClusterTopology()
       case message: FailedWorkerActor =>
+        logger.debug(s"Register FailedWorkerActor: $message")
         clusterManagement.registerFailedWorkerActor(message)
         clusterManagement.sendClusterTopology()
       case other =>

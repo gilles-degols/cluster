@@ -10,7 +10,7 @@ trait PackageLeaderApi {
     * Package name
     * @return
     */
-  def packageName: String
+  val packageName: String
 
   /**
     * We start the related actor
@@ -41,4 +41,10 @@ trait PackageLeaderApi {
     * List of available WorkerActors given by the developer in the current jvm.
     */
   def workerInfos: Seq[WorkerInfo]
+
+  /**
+    * Method called once after the setup of _context and ClusterServiceLeader and once the manager is connected.
+    * Could typically be used to send WorkerOrder
+    */
+  def postManagerConnection(): Unit = Unit
 }

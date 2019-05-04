@@ -99,11 +99,19 @@ class ClusterLeaderActor @Inject()(
       logger.warn(s"Got a TheLeaderIs message from the manager: $message")
       service.manager = message.leaderWrapper // message.leader is only used for the election != cluster management as the cluster management owns the election actor.
       // We need to send all worker type info (even if the manager has just switched, we don't care)
-      service.notifyWorkerTypeInfo()
+      service.notifyWorkerTypeInfo(componentLeaderApi)
+
+      // Set up of the packageLeaders is done, we can execute the post-start of the packageLeaders (most of the time
+      // they contain nothing)
+      message.leader.foreach(x => {
+        componentLeaderApi.packageLeaders.foreach(pck => {
+          pck.postManagerConnection()
+        })
+      })
 
     case clusterMessage: ClusterRemoteMessage =>
       // Message used for the administration, we execute it
-      service.handleClusterRemoteMessage(clusterMessage)
+      service.handleClusterRemoteMessage(componentLeaderApi, clusterMessage)
 
     case IsStillDisconnectedFromManager =>
       service.manager match {

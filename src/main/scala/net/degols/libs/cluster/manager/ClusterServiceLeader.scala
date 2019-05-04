@@ -25,7 +25,7 @@ case class StartWorkerWrapper(shortName: String, actorName: String, infoMetadata
   * Contain tools to communicate with the Manager of the cluster. Typically useful to send WorkerOrder
   */
 @Singleton
-class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
+class ClusterServiceLeader {
   private val logger = LoggerFactory.getLogger(getClass)
 
   /**
@@ -61,26 +61,6 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
     */
   private[manager] var jvmTopology: JVMTopology = _
 
-  /**
-    * Convert a local WorkerOrder to a WorkerTypeOrder to send it to the Manager
-    * @param workerOrder
-    */
-  private def convertWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext): WorkerTypeOrder = {
-    val orderId = workerOrder.id match {
-      case Some(id) =>
-        if(!id.contains(workerOrder.fullName)) {
-          throw new Exception(s"Invalid custom orderId '$id' for a WorkerOrder ${workerOrder.fullName}, it MUST always contain the fullName to avoid " +
-            "clashes.")
-        }
-        logger.debug(s"The developer specified himself/herself a specific id '$id' for a WorkerOrder: ${workerOrder.fullName}, be careful.")
-        id
-      case None =>
-        // The orderId must remain the same across the different JVM, so it should not be customized with node information
-        // Unless the developer really knows what he is doing
-        s"${workerOrder.fullName}_default"
-    }
-    WorkerTypeOrder(context.self, workerOrder.fullName, workerOrder.balancerType, orderId, workerOrder.metadata.toString())
-  }
 
   /**
     * Convert a local WorkerInfo to a WorkerTypeInfo to send it to the Manager
@@ -105,7 +85,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
   /**
     * Send all WorkerInfo to the Manager
     */
-  private[manager] def notifyWorkerTypeInfo()(implicit context: ActorContext): Unit = {
+  private[manager] def notifyWorkerTypeInfo(componentLeaderApi: ComponentLeaderApi)(implicit context: ActorContext): Unit = {
     manager match {
       case Some(currentManager) =>
         logger.debug(s"Send all workerTypeInfo to the manager $currentManager")
@@ -119,7 +99,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
             // If there is balancer, we can directly send the WorkerOrder to the manager
             loadWorkerOrderFromInfo(componentLeaderApi.componentName, packageLeader.packageName, workerInfo)
               .foreach(order => {
-                currentManager ! convertWorkerOrder(order)
+                currentManager ! communication.convertWorkerOrder(order)
               })
           })
         })
@@ -132,7 +112,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
   /**
     * Handle some cluster messages, so nothing related to the election system in itself;
     */
-  private[manager] def handleClusterRemoteMessage(clusterRemoteMessage: ClusterRemoteMessage)(implicit context: ActorContext) = Try {
+  private[manager] def handleClusterRemoteMessage(componentLeaderApi: ComponentLeaderApi, clusterRemoteMessage: ClusterRemoteMessage)(implicit context: ActorContext) = Try {
     // The entire method is surrounded by a Try to be sure we don't crash for any reason. But we should handle every
     // message correctly by default
     clusterRemoteMessage match {
@@ -140,7 +120,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
         logger.info(s"[WorkerLeader] Received ClusterTopology: $message")
         _clusterTopology = Option(message)
       case message: StartWorkerActor =>
-        handleStartWorker(message)
+        handleStartWorker(componentLeaderApi, message)
       case x =>
         logger.error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")
     }
@@ -150,7 +130,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
     * In charge of handling a StartWorkerActor message received from the manager, and try to start it
     * @param message
     */
-  private def handleStartWorker(message: StartWorkerActor)(implicit context: ActorContext): Unit = {
+  private def handleStartWorker(componentLeaderApi: ComponentLeaderApi, message: StartWorkerActor)(implicit context: ActorContext): Unit = {
     // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
     logger.info(s"Starting worker type id: ${message.workerTypeInfo.workerTypeId}")
 
@@ -182,7 +162,7 @@ class ClusterServiceLeader @Inject()(componentLeaderApi: ComponentLeaderApi) {
         // Setting a watcher can lead to failure if the actors just die at that moment
         Try{context.watch(res)} match {
           case Success(s) =>
-            val workerActorHealth = WorkerActorHealth(context.self, message.workerTypeInfo, res, nodeInfo.get, context.self, message.workerId, message.workerTypeOrder.id)
+            val workerActorHealth = WorkerActorHealth(context.self, message.workerTypeInfo, message.workerTypeOrder, res, nodeInfo.get, context.self, message.workerId)
             jvmTopology.addWorkerActor(workerActorHealth)
             val m = StartedWorkerActor(context.self, message, res)
             m.nodeInfo = nodeInfo.get

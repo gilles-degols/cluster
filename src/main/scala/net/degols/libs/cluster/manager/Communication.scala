@@ -1,12 +1,14 @@
 package net.degols.libs.cluster.manager
 
-import akka.actor.ActorRef
+import akka.actor.{ActorContext, ActorRef}
 import akka.util.Timeout
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Random, Try}
 import akka.pattern.ask
+import net.degols.libs.cluster.messages.{WorkerActorHealth, WorkerTypeOrder}
+
 import scala.concurrent.duration._
 
 case class RemoteReply(content: Any)
@@ -16,6 +18,71 @@ case class RemoteReply(content: Any)
   */
 class Communication(service: ClusterServiceLeader) {
   private val logger = LoggerFactory.getLogger(getClass)
+
+  /**
+    * ActorRefs matching the given WorkerTypeId and the OrderId
+    */
+  def actorRefsForTypeAndOrder(workerTypeId: String, orderId: String): Seq[ActorRef] = {
+    service._clusterTopology match {
+      case None =>
+        logger.error("ClusterTopology not yet available.")
+        List.empty[ActorRef]
+      case Some(topology) =>
+        topology.workerActors.getOrElse(workerTypeId, List.empty[WorkerActorHealth])
+          .filter(_.workerTypeOrder.id == orderId).map(_.workerActorRef)
+    }
+  }
+
+  /**
+    * List of all available workerTypeIds
+    * TODO: This might not be useful anymore
+    * @return
+    */
+  def workerTypeIds(): Seq[String] = {
+    service._clusterTopology match {
+      case None =>
+        logger.error("ClusterTopology not yet available.")
+        List.empty[String]
+      case Some(topology) =>
+        topology.workerActors.keys.toList
+    }
+  }
+
+  /**
+    * Convert a local WorkerOrder to a WorkerTypeOrder to send it to the Manager
+    * @param workerOrder
+    */
+  private[manager] def convertWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext): WorkerTypeOrder = {
+    val orderId = workerOrder.id match {
+      case Some(id) =>
+        if(!id.contains(workerOrder.fullName)) {
+          throw new Exception(s"Invalid custom orderId '$id' for a WorkerOrder ${workerOrder.fullName}, it MUST always contain the fullName to avoid " +
+            "clashes.")
+        }
+        logger.debug(s"The developer specified himself/herself a specific id '$id' for a WorkerOrder: ${workerOrder.fullName}, be careful.")
+        id
+      case None =>
+        // The orderId must remain the same across the different JVM, so it should not be customized with node information
+        // Unless the developer really knows what he is doing
+        s"${workerOrder.fullName}_default"
+    }
+    WorkerTypeOrder(context.self, workerOrder.fullName, workerOrder.balancerType, orderId, workerOrder.metadata.toString())
+  }
+
+  /**
+    * Send a WorkerOrder to the manager (if it exists)
+    * @return
+    */
+  def sendWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext) = {
+    service.manager match {
+      case Some(manager) =>
+        logger.debug(s"Sending WorkerOrder ${workerOrder.fullName} - ${workerOrder.id}")
+        manager ! convertWorkerOrder(workerOrder)
+      case None =>
+        logger.warn(s"There is no manager available for the moment to send the WorkerOrder $workerOrder!")
+        None
+    }
+  }
 
   def actorRefsForId(workerTypeId: String): Seq[ActorRef] = {
     service._clusterTopology match {

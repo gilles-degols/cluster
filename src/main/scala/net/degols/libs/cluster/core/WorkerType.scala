@@ -64,7 +64,7 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
       val rawWorkerType = new WorkerType(workerActorHealth.workerTypeId, workerActorHealth.workerTypeInfo)
       rawWorkerType == this
     }).foreach(workerActorHealth => {
-      val orderId = workerActorHealth.orderId
+      val orderId = workerActorHealth.workerTypeOrder.id
       val rawWorker = new Worker(workerActorHealth.workerActorId, orderId, Option(workerActorHealth.workerActorRef))
       addWorker(rawWorker)
     })

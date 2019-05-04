@@ -14,7 +14,7 @@ trait ComponentLeaderApi {
     * to put a ComponentName
     * @return
     */
-  def componentName: String
+  val componentName: String
 
   /**
     * Link to all package leaders
