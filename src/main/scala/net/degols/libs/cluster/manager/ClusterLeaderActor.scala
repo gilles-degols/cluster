@@ -81,6 +81,11 @@ class ClusterLeaderActor @Inject()(
       pck.setClusterServiceLeader(service)
     })
 
+    // Set up the different workers
+    componentLeaderApi.packageLeaders.foreach(pck => {
+      pck.setupWorkers()
+    })
+
     // Inform the localManager of our existence and give the optional UserLoadBalancer objects
     localManager ! IAmTheWorkerLeader(componentLeaderApi.loadBalancers)
   }

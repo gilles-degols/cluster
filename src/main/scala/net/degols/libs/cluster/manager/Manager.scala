@@ -105,7 +105,7 @@ final class Manager @Inject()(electionService: ElectionService,
       clusterManagement.removeWatchedActor(message.actor)
 
     case message =>
-      logger.debug(s"[Manager] Received unknown message: $message")
+      logger.warn(s"[Manager] Received unknown message: $message")
   }
 
   def checkChangedLeader(): Unit = {

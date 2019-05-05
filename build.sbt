@@ -30,7 +30,7 @@ libraryDependencies += "commons-io" % "commons-io" % "2.4"
 val electionLibraryVersion = "1.0.0"
 val electionPath = "../election"
 lazy val electionLibrary: RootProject = RootProject(file(electionPath))
-val useLocalElectionLibrary = false
+val useLocalElectionLibrary = true
 val localElectionAvailable = scala.reflect.io.File(scala.reflect.io.Path(electionPath)).exists
 lazy val cluster = if(localElectionAvailable && useLocalElectionLibrary) {
   (project in file(".")).dependsOn(electionLibrary)
