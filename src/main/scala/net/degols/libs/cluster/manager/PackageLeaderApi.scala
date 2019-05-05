@@ -62,7 +62,6 @@ trait PackageLeaderApi {
     logger.debug(s"Try to start the worker for the package $packageName and shortName: ${work.shortName}")
     workers.find(_._1.shortName == work.shortName) match {
       case Some(res) =>
-        logger.debug("===> Executing start of worker")
         res._2(work)
       case None =>
         throw new UnknownWorker(s"Worker for shortName ${work.shortName} is not known in package $packageName.")

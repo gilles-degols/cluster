@@ -3,7 +3,6 @@ package net.degols.libs.cluster.core
 import akka.actor.{ActorContext, ActorRef}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.messages._
-import net.degols.libs.election.Tools
 import net.degols.libs.cluster.{ClusterTools => ClusterTools}
 import org.slf4j.LoggerFactory
 
