@@ -140,11 +140,28 @@ final class Manager @Inject()(electionService: ElectionService,
       case message: StartedWorkerActor =>
         logger.debug(s"Register StartedWorkerActor: $message")
         clusterManagement.registerStartedWorkerActor(message)
-        clusterManagement.sendClusterTopology()
       case message: FailedWorkerActor =>
         logger.debug(s"Register FailedWorkerActor: $message")
         clusterManagement.registerFailedWorkerActor(message)
-        clusterManagement.sendClusterTopology()
+      case message: GetActorRefsFor =>
+        logger.debug(s"Worker ${sender()} is asking for the ActorRefs of workerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
+        Try {
+          val actorRefs = clusterManagement.actorRefsFor(message.workerTypeId, message.orderId, message.isRunning)
+          sender() ! actorRefs
+        } match {
+          case Success(res) => // Nothing to do
+          case Failure(err) => logger.error(s"Impossible to reply to ${sender()} about the actorRefs for the WorkerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
+        }
+      case message: GetAllWorkerTypeIds =>
+        logger.debug(s"Worker ${sender()} is asking for the existing workerTypeIds in the system.")
+        Try {
+          val workerTypeIds = clusterManagement.existingWorkerTypeIds()
+          sender() ! workerTypeIds
+        } match {
+          case Success(res) => // Nothing to do
+          case Failure(err) => logger.error(s"Impossible to reply to ${sender()} about the existing WorkerTypeIds")
+        }
+
       case other =>
         logger.error(s"Received unknown ClusterRemoteMessage: $rawMessage")
     }

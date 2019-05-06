@@ -60,6 +60,7 @@ trait PackageLeaderApi {
     */
   def startWorker(work: StartWorkerWrapper): ActorRef = {
     logger.debug(s"Try to start the worker for the package $packageName and shortName: ${work.shortName}")
+    logger.error(s" ====> Try to start the worker for the package $packageName and shortName: ${work.shortName}")
     workers.find(_._1.shortName == work.shortName) match {
       case Some(res) =>
         res._2(work)

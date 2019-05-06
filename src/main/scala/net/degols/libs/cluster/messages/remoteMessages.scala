@@ -85,6 +85,32 @@ object WorkerTypeInfo {
 }
 
 /**
+  * Some trait used to indicate we ask information from the Manager
+  */
+trait ClusterInfo
+
+/**
+  * A worker might want to contact other workers. To avoid sending the entire system topology to each worker, when needed,
+  * the worker contacts the Manager to know which actors are available for a given WorkerType.
+  * This system is not meant to be used for every message, otherwise the manager will be overloaded. A Cache system
+  * must be added in the Worker itself.
+  * If an OrderId is specified, only return the ActorRefs for the given workerTypeId and orderId
+  * If an isRunning is specifed, only return the ActorRefs if the related worker is set as 'Running'
+  * The return will be an Seq[ActorRef]
+  */
+@SerialVersionUID(1L)
+case class GetActorRefsFor(actorRef: ActorRef, workerTypeId: String, orderId: Option[String], isRunning: Option[Boolean]) extends ClusterRemoteMessage(actorRef) with ClusterInfo
+
+/**
+  * Return a list of all the different WorkerTypeId existing in the system.
+  *
+  * The return will be a Seq[String]
+  */
+@SerialVersionUID(1L)
+case class GetAllWorkerTypeIds(actorRef: ActorRef) extends ClusterRemoteMessage(actorRef) with ClusterInfo
+
+
+/**
   * Order from a Manager to a WorkerLeader to start an instance of a WorkerActor
   * @param actorRef
   */

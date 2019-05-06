@@ -29,6 +29,32 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
   }
 
   /**
+    * Return the list of actorRefs for a given WorkerTypeId and optional orderId
+    */
+  def actorRefsFor(workerTypeId: String, orderId: Option[String], isRunning: Option[Boolean]): Seq[ActorRef] = {
+    _clusterTopology.getWorkerActors(workerTypeId).filter(health => {
+      if(orderId.isDefined) {
+        health.workerTypeOrder.id == orderId.get
+      } else {
+        true
+      }
+    }).filter(health => {
+      if(isRunning.isDefined) {
+        health.isRunning == isRunning.get
+      } else {
+        true
+      }
+    }).map(_.workerActorRef)
+  }
+
+  /**
+    * Return the list of WorkerTypeId
+    */
+  def existingWorkerTypeIds(): Seq[String] = {
+    _clusterTopology.workerActors.keys.toList
+  }
+
+  /**
     * Every WorkerLeader sends its WorkerInfo from time to time. We have to store it (to know which JVM can start actors
     * of a specific type and so on)
     */
@@ -110,13 +136,6 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
             logger.error(s"There is no loadBalancer accepting the type ${order.loadBalancerType}!")
         }
     })
-  }
-
-  /**
-    * Send ClusterTopology to every WorkerLeader
-    */
-  def sendClusterTopology(): Unit = {
-    cluster.nodes.flatMap(_.workerManagers.map(_.actorRef)).foreach(workerManagerRef => workerManagerRef ! _clusterTopology)
   }
 
   /**

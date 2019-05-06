@@ -10,10 +10,12 @@ import org.slf4j.LoggerFactory
 import collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Try
+import javax.inject.Singleton
 
 /**
   * Created by Gilles.Degols on 03-09-18.
   */
+@Singleton
 class ClusterConfiguration @Inject()(val defaultConfig: Config) {
   private val logger = LoggerFactory.getLogger(getClass)
   /**
@@ -69,6 +71,22 @@ class ClusterConfiguration @Inject()(val defaultConfig: Config) {
     * How much time do we allow to start a WorkerOrder before considering as failing?
     */
   val startWorkerTimeout: FiniteDuration = config.getInt("cluster.start-worker-timeout-ms") millis
+
+  /**
+    * How many entries of ClusterInfo can we keep in the cache?
+    * Normally there is no need to keep track of 1000s of them
+    */
+  val clusterInfoCacheSize: Int = config.getInt("cluster.cache.cluster-info-size")
+
+  /**
+    * How much time (seconds) should we keep a ClusterInfo entry
+    */
+  val clusterInfoCacheTimeout: Int = config.getInt("cluster.cache.cluster-info-lifetime-s")
+
+  /**
+    * Maximum timeout allowed to ask for info to the manager
+    */
+  val clusterInfoTimeout: Int = config.getInt("cluster.cluster-info-timeout-s")
 
   /**
     * It's difficult to get a remote actor path locally. Because of that, we still want to know the current hostname + port

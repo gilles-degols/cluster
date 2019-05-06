@@ -1,13 +1,22 @@
 package net.degols.libs.cluster.manager
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{ActorContext, ActorRef, Cancellable}
 import akka.util.Timeout
 import javax.inject.{Inject, Singleton}
-import net.degols.libs.cluster.ClusterTools
-import net.degols.libs.cluster.messages.{ClusterRemoteMessage, ClusterTopology, FailedWorkerActor, JVMTopology, NodeInfo, StartWorkerActor, StartedWorkerActor, WorkerActorHealth, WorkerTypeInfo, WorkerTypeOrder}
+import net.degols.libs.cluster.{ClusterConfiguration, ClusterTools}
+import net.degols.libs.cluster.messages.{ClusterInfo, ClusterRemoteMessage, ClusterTopology, FailedWorkerActor, JVMTopology, NodeInfo, StartWorkerActor, StartedWorkerActor, WorkerActorHealth, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.LoggerFactory
 import akka.pattern.ask
+import com.github.benmanes.caffeine.cache.Caffeine
 import play.api.libs.json.{JsObject, Json}
+import scalacache.caffeine.CaffeineCache
+import scalacache._
+import scalacache.caffeine._
+import scalacache.modes.scalaFuture._
+import scalacache.Entry
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
@@ -22,10 +31,10 @@ import scala.util.{Failure, Random, Success, Try}
 case class StartWorkerWrapper(shortName: String, actorName: String, infoMetadata: JsObject, orderMetadata: JsObject, initialMessage: StartWorkerActor)
 
 /**
-  * Contain tools to communicate with the Manager of the cluster. Typically useful to send WorkerOrder
+  * Contain tools to communicate with the Manager of the cluster. Typically useful to send WorkerOrders
   */
 @Singleton
-class ClusterServiceLeader {
+class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration) {
   private val logger = LoggerFactory.getLogger(getClass)
 
   /**
@@ -50,17 +59,63 @@ class ClusterServiceLeader {
     */
   var startedWorkers: Long = 0L
 
-  /**
-    * Topology of the cluster. Must remain private as in the future it might disappear (to avoid sending the complete
-    * topology at each call we could go through the manager to have the needed actorRefs)
-    */
-  private[manager] var _clusterTopology: Option[ClusterTopology] = None
 
   /**
     * Information about the current topology we have in this jvm. Set up by the ClusterLeaderActor
     */
   private[manager] var jvmTopology: JVMTopology = _
 
+
+  protected val cache: CaffeineCache[Any] = {
+    val underlying = Caffeine.newBuilder()
+      .maximumSize(clusterConfiguration.clusterInfoCacheSize)
+      .expireAfterWrite(clusterConfiguration.clusterInfoCacheTimeout, TimeUnit.SECONDS)
+      .build[String, Entry[Any]]
+    CaffeineCache(underlying)
+  }
+
+  /**
+    * Ask some information to the Manager. To avoid overloading the remote system, we introduce a cache
+    */
+  def askClusterInfo(clusterInfo: ClusterInfo)(implicit sender: ActorRef): Future[Option[Any]] = {
+    val key = clusterInfo.hashCode().toString
+    cache.get(key).transform({
+      case Success(r) => Success(r)
+      case Failure(e) =>
+        logger.error("Impossible to fetch ClusterInfo data from the cache", e)
+        Success(None)
+    }).flatMap {
+      case Some(r) => Future{Option(r)}
+      case None =>
+        // Info not available in the cache, fetch it from Remote and automatically adds it to cache
+        fetchFromManager(clusterInfo)
+    }
+  }
+
+  /**
+    * Send arbitrary message to Manager and return the result, while putting it in the cache
+    * @param clusterInfo
+    * @return
+    */
+  private def fetchFromManager(clusterInfo: ClusterInfo)(implicit sender: ActorRef): Future[Option[Any]] = {
+    val key = clusterInfo.hashCode().toString
+    manager match {
+      case Some(r) =>
+        implicit val timeout: Timeout = 5 seconds // Keep an empty line after this one, intellij idea does not parse it correctly otherwise
+
+        r.ask(clusterInfo)(timeout).transform{
+          case Success(result) =>
+            cache.put(key)(result) // Update the cache
+            Success(Option(result))
+          case Failure(error) =>
+            logger.error(s"Failure while fetching $clusterInfo from Manager.", error)
+            Success(None)
+        }
+      case None =>
+        logger.error(s"Manager not available to fetch $clusterInfo from it.")
+        Future{None}
+    }
+  }
 
   /**
     * Convert a local WorkerInfo to a WorkerTypeInfo to send it to the Manager
@@ -116,9 +171,6 @@ class ClusterServiceLeader {
     // The entire method is surrounded by a Try to be sure we don't crash for any reason. But we should handle every
     // message correctly by default
     clusterRemoteMessage match {
-      case message: ClusterTopology =>
-        logger.info(s"[WorkerLeader] Received ClusterTopology: $message")
-        _clusterTopology = Option(message)
       case message: StartWorkerActor =>
         handleStartWorker(componentLeaderApi, message)
       case x =>

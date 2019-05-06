@@ -5,6 +5,9 @@ import java.io.{PrintWriter, StringWriter}
 import akka.actor.ActorRef
 import org.joda.time.{DateTime, DateTimeZone}
 
+import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 import sys.process._
 
 /**
@@ -19,6 +22,35 @@ object ClusterTools {
     val sw = new StringWriter()
     exception.printStackTrace(new PrintWriter(sw))
     sw.toString
+  }
+
+  /**
+    * Fold an iterator of futures together, to process them one by one
+    */
+  def foldFutures[A, T](iter: Iterator[T], met: T => Future[A], stopOnFailure: Boolean = false)(implicit ec: ExecutionContext): Future[Seq[Try[A]]] = {
+    val resBase = Future.successful(mutable.ListBuffer.empty[Try[A]])
+    var failureSeen: Boolean = false
+
+    iter.foldLeft(resBase) { (futureRes, current) =>
+      if(!failureSeen || !stopOnFailure) {
+        futureRes.flatMap(res => {
+          // By wrapping the "met" with a future, we handle a potential problem in the "met" outside of the expected Future itself
+          Future{met(current)}
+            .flatten
+            .transform {
+              case Success(r) => Success(Try{r})
+              case Failure(e) =>
+                failureSeen = true
+                Success(Try{throw e})
+            }.map(raw => {
+              res.append(raw)
+              res
+            })
+        })
+      } else {
+       futureRes
+      }
+    }.map(_.toList)
   }
 
   /**

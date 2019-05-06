@@ -52,6 +52,12 @@ libraryDependencies += "org.mongodb" % "mongo-java-driver" % "3.7.0"
 // Akka Remoting
 libraryDependencies += "com.typesafe.akka" %% "akka-remote" % akkaVersion
 
+// https://mvnrepository.com/artifact/com.github.cb372/scalacache-core
+libraryDependencies += "com.github.cb372" %% "scalacache-core" % "0.27.0"
+// https://mvnrepository.com/artifact/com.github.cb372/scalacache-caffeine
+libraryDependencies += "com.github.cb372" %% "scalacache-caffeine" % "0.27.0"
+
+
 // Allow temporary overwrite
 // publishConfiguration := publishConfiguration.value.withOverwrite(true)
 // publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)

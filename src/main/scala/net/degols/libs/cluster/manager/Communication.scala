@@ -5,10 +5,11 @@ import akka.util.Timeout
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
-import net.degols.libs.cluster.messages.{WorkerActorHealth, WorkerTypeOrder}
+import net.degols.libs.cluster.messages.{GetActorRefsFor, GetAllWorkerTypeIds, MissingActor, WorkerActorHealth, WorkerTypeOrder}
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 case class RemoteReply(content: Any)
@@ -22,15 +23,21 @@ class Communication(service: ClusterServiceLeader) {
   /**
     * ActorRefs matching the given WorkerTypeId and the OrderId
     */
-  def actorRefsForTypeAndOrder(workerTypeId: String, orderId: String): Seq[ActorRef] = {
-    service._clusterTopology match {
-      case None =>
-        logger.error("ClusterTopology not yet available.")
-        List.empty[ActorRef]
-      case Some(topology) =>
-        topology.workerActors.getOrElse(workerTypeId, List.empty[WorkerActorHealth])
-          .filter(_.workerTypeOrder.id == orderId).map(_.workerActorRef)
-    }
+  def actorRefsForTypeAndOrder(workerTypeId: String, orderId: String)(implicit context: ActorContext): Future[Seq[ActorRef]] = {
+    implicit val sender = context.self
+    implicit val ac = context.dispatcher
+    val m = GetActorRefsFor(sender, workerTypeId, Option(orderId), None)
+
+    service.askClusterInfo(m)
+      .transform{
+        case Success(r) =>
+          Success(r)
+        case Failure(e) =>
+          logger.error("Problem while fetching data from the manager", e)
+          Success(None)
+      }.map(res => {
+      res.map(_.asInstanceOf[List[ActorRef]]).getOrElse(List.empty[ActorRef])
+    })
   }
 
   /**
@@ -38,14 +45,21 @@ class Communication(service: ClusterServiceLeader) {
     * TODO: This might not be useful anymore
     * @return
     */
-  def workerTypeIds(): Seq[String] = {
-    service._clusterTopology match {
-      case None =>
-        logger.error("ClusterTopology not yet available.")
-        List.empty[String]
-      case Some(topology) =>
-        topology.workerActors.keys.toList
-    }
+  def workerTypeIds()(implicit context: ActorContext): Future[Seq[String]] = {
+    implicit val sender = context.self
+    implicit val ac = context.dispatcher
+    val m = GetAllWorkerTypeIds(sender)
+
+    service.askClusterInfo(m)
+      .transform{
+        case Success(r) =>
+          Success(r)
+        case Failure(e) =>
+          logger.error("Problem while fetching data from the manager", e)
+          Success(None)
+      }.map(res => {
+      res.map(_.asInstanceOf[List[String]]).getOrElse(List.empty[String])
+    })
   }
 
   /**
@@ -73,7 +87,7 @@ class Communication(service: ClusterServiceLeader) {
     * Send a WorkerOrder to the manager (if it exists)
     * @return
     */
-  def sendWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext) = {
+  def sendWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext): Unit = {
     service.manager match {
       case Some(manager) =>
         logger.debug(s"Sending WorkerOrder ${workerOrder.fullName} - ${workerOrder.id}")
@@ -84,72 +98,43 @@ class Communication(service: ClusterServiceLeader) {
     }
   }
 
-  def actorRefsForId(workerTypeId: String): Seq[ActorRef] = {
-    service._clusterTopology match {
-      case None =>
-        logger.error("ClusterTopology not yet available.")
-        List.empty[ActorRef]
-      case Some(topology) =>
-        topology.getWorkerActors(workerTypeId).filter(_.isRunning).map(_.workerActorRef)
-    }
-  }
+  def actorRefsForId(workerTypeId: String)(implicit context: ActorContext): Future[Seq[ActorRef]] = {
+    implicit val sender = context.self
+    implicit val ac = context.dispatcher
+    val m = GetActorRefsFor(sender, workerTypeId, None, Option(true))
 
-  def sendWithReply(sender: ActorRef, workerTypeId: String, message: Any)(implicit timeout: Timeout): Try[RemoteReply] = Try {
-    var result: Try[RemoteReply] = Failure(new Exception("Method not called"))
-    val actorRefs: Seq[ActorRef] = actorRefsForId(workerTypeId)
-
-    if(actorRefs.nonEmpty) {
-      // Simply take one at random. If we want to do smarter load balancing, you need to handle it yourselves
-      val actorRef = Random.shuffle(actorRefs).head
-      result = internalSendWithReply(sender, actorRef, message)
-      if(result.isSuccess) {
-        return result
-      }
-    }
-
-    result.get
-  }
-
-  def sendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any)(implicit timeout: Timeout): Try[RemoteReply] = Try{
-    var result: Try[RemoteReply] = Failure(new Exception("Method not called"))
-    result = internalSendWithReply(sender, actorRef, message)
-    if(result.isSuccess) {
-      return result
-    }
-
-    result.get
-  }
-
-  def askForReply(sender: ActorRef, actorRef: ActorRef, message: Any)(implicit ec: ExecutionContext, timeout: Timeout): Future[RemoteReply] = {
-    implicit val send: ActorRef = sender
-    actorRef.ask(message)(timeout).map(raw => {
-      RemoteReply(raw)
+    service.askClusterInfo(m)
+      .transform{
+        case Success(r) =>
+          Success(r)
+        case Failure(e) =>
+          logger.error("Problem while fetching data from the manager", e)
+          Success(None)
+      }.map(res => {
+      res.map(_.asInstanceOf[List[ActorRef]]).getOrElse(List.empty[ActorRef])
     })
   }
 
-  def sendWithoutReply(sender: ActorRef, actorRef: ActorRef, message: Any): Try[Unit] = Try{
-    actorRef.tell(message, sender)
+  def sendWithReply(workerTypeId: String, message: Any)(implicit timeout: Timeout, context: ActorContext): Future[RemoteReply] = {
+    actorRefsForId(workerTypeId)
+      .flatMap(actorRefs => {
+        if(actorRefs.nonEmpty) {
+          // Simply take one at random. If we want to do smarter load balancing, you need to handle it yourselves
+          val actorRef = Random.shuffle(actorRefs).head
+          sendWithReply(actorRef, message)
+        } else {
+          Future{throw new MissingActor(s"Not actor found for $workerTypeId")}
+        }
+      })
   }
 
-  private def internalSendWithReply(sender: ActorRef, actorRef: ActorRef, message: Any)(implicit timeout: Timeout): Try[RemoteReply] = Try{
-    try{
-      implicit val send = sender
-      Await.result(actorRef.ask(message), timeout.duration) match {
-        case x: Throwable =>
-          logger.error(s"Got a generic Throwable exception (not expected) while sending a message to $actorRef: $x")
-          throw x
-        case x =>
-          logger.debug(s"Received result from $actorRef : $x")
-          RemoteReply(content=x)
-      }
-    } catch {
-      case x: TimeoutException =>
-        logger.warn(s"Got TimeoutException while trying to send a message ($message) to $actorRef.")
-        throw x
-      case x: Throwable =>
-        logger.error(s"Got a generic Throwable exception (not expected) while sending a message to $actorRef.")
-        throw x
-    }
+  def sendWithReply(actorRef: ActorRef, message: Any)(implicit timeout: Timeout, context: ActorContext): Future[RemoteReply] = {
+    actorRef.ask(message)(timeout.duration).map(raw => RemoteReply(raw))
+  }
+
+  def sendWithoutReply(actorRef: ActorRef, message: Any)(implicit context: ActorContext): Try[Unit] = Try{
+    implicit val sender: ActorRef = context.self
+    actorRef.tell(message, sender)
   }
 }
 
