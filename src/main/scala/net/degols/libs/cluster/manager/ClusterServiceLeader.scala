@@ -5,18 +5,18 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorContext, ActorRef, Cancellable}
 import akka.util.Timeout
 import javax.inject.{Inject, Singleton}
-import net.degols.libs.cluster.{ClusterConfiguration, ClusterTools}
+import net.degols.libs.cluster.ClusterTools
 import net.degols.libs.cluster.messages.{ClusterInfo, ClusterRemoteMessage, ClusterTopology, FailedWorkerActor, JVMTopology, NodeInfo, StartWorkerActor, StartedWorkerActor, WorkerActorHealth, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.LoggerFactory
 import akka.pattern.ask
 import com.github.benmanes.caffeine.cache.Caffeine
+import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import play.api.libs.json.{JsObject, Json}
 import scalacache.caffeine.CaffeineCache
 import scalacache._
 import scalacache.caffeine._
 import scalacache.modes.scalaFuture._
 import scalacache.Entry
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
@@ -34,8 +34,9 @@ case class StartWorkerWrapper(shortName: String, actorName: String, infoMetadata
   * Contain tools to communicate with the Manager of the cluster. Typically useful to send WorkerOrders
   */
 @Singleton
-class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration) {
+class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurationApi) {
   private val logger = LoggerFactory.getLogger(getClass)
+  implicit val ec: ExecutionContext = clusterConfigurationApi.executionContext
 
   /**
     * Tool to easily communicate with other JVMs
@@ -66,12 +67,17 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
   private[manager] var jvmTopology: JVMTopology = _
 
 
-  protected val cache: CaffeineCache[Any] = {
-    val underlying = Caffeine.newBuilder()
-      .maximumSize(clusterConfiguration.clusterInfoCacheSize)
-      .expireAfterWrite(clusterConfiguration.clusterInfoCacheTimeout, TimeUnit.SECONDS)
-      .build[String, Entry[Any]]
-    CaffeineCache(underlying)
+  protected val cache: Future[CaffeineCache[Any]] = {
+    for {
+      clusterInfoCacheSize <- clusterConfigurationApi.clusterInfoCacheSize
+      clusterInfoCacheTimeout <- clusterConfigurationApi.clusterInfoCacheTimeout
+    } yield {
+      val underlying = Caffeine.newBuilder()
+        .maximumSize(clusterInfoCacheSize)
+        .expireAfterWrite(clusterInfoCacheTimeout, TimeUnit.SECONDS)
+        .build[String, Entry[Any]]
+      CaffeineCache(underlying)
+    }
   }
 
   /**
@@ -79,7 +85,7 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
     */
   def askClusterInfo(clusterInfo: ClusterInfo)(implicit sender: ActorRef): Future[Option[Any]] = {
     val key = clusterInfo.hashCode().toString
-    cache.get(key).transform({
+    cache.map(c => c.get(key).transform({
       case Success(r) => Success(r)
       case Failure(e) =>
         logger.error("Impossible to fetch ClusterInfo data from the cache", e)
@@ -89,7 +95,7 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
       case None =>
         // Info not available in the cache, fetch it from Remote and automatically adds it to cache
         fetchFromManager(clusterInfo)
-    }
+    }).flatten
   }
 
   /**
@@ -103,13 +109,17 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
       case Some(r) =>
         implicit val timeout: Timeout = 5 seconds // Keep an empty line after this one, intellij idea does not parse it correctly otherwise
 
-        r.ask(clusterInfo)(timeout).transform{
+        r.ask(clusterInfo)(timeout).transformWith{
           case Success(result) =>
-            cache.put(key)(result) // Update the cache
-            Success(Option(result))
+            cache.map(c => {
+              c.put(key)(result)  // Update the cache
+              Option(result)
+            })
           case Failure(error) =>
             logger.error(s"Failure while fetching $clusterInfo from Manager.", error)
-            Success(None)
+            Future.successful{
+              None
+            }
         }
       case None =>
         logger.error(s"Manager not available to fetch $clusterInfo from it.")
@@ -140,19 +150,19 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
   /**
     * Send all WorkerInfo to the Manager
     */
-  private[manager] def notifyWorkerTypeInfo(componentLeaderApi: ComponentLeaderApi)(implicit context: ActorContext): Unit = {
+  private[manager] def notifyWorkerTypeInfo(componentLeader: ComponentLeader)(implicit context: ActorContext): Unit = {
     manager match {
       case Some(currentManager) =>
         logger.debug(s"Send all workerTypeInfo to the manager $currentManager")
-        componentLeaderApi.packageLeaders.foreach(packageLeader => {
+        componentLeader.packageLeaders.foreach(packageLeader => {
           packageLeader.workerInfos.foreach(workerInfo => {
             // First send the workerTypeInfo
-            val workerTypeInfo = convertWorkerInfo(componentLeaderApi.componentName, packageLeader.packageName, workerInfo)
+            val workerTypeInfo = convertWorkerInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
             workerTypeInfo.nodeInfo = nodeInfo.get
             currentManager ! workerTypeInfo
 
             // If there is balancer, we can directly send the WorkerOrder to the manager
-            loadWorkerOrderFromInfo(componentLeaderApi.componentName, packageLeader.packageName, workerInfo)
+            loadWorkerOrderFromInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
               .foreach(order => {
                 currentManager ! communication.convertWorkerOrder(order)
               })
@@ -167,12 +177,12 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
   /**
     * Handle some cluster messages, so nothing related to the election system in itself;
     */
-  private[manager] def handleClusterRemoteMessage(componentLeaderApi: ComponentLeaderApi, clusterRemoteMessage: ClusterRemoteMessage)(implicit context: ActorContext) = Try {
+  private[manager] def handleClusterRemoteMessage(componentLeader: ComponentLeader, clusterRemoteMessage: ClusterRemoteMessage)(implicit context: ActorContext) = Try {
     // The entire method is surrounded by a Try to be sure we don't crash for any reason. But we should handle every
     // message correctly by default
     clusterRemoteMessage match {
       case message: StartWorkerActor =>
-        handleStartWorker(componentLeaderApi, message)
+        handleStartWorker(componentLeader, message)
       case x =>
         logger.error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")
     }
@@ -182,14 +192,14 @@ class ClusterServiceLeader @Inject()(clusterConfiguration: ClusterConfiguration)
     * In charge of handling a StartWorkerActor message received from the manager, and try to start it
     * @param message
     */
-  private def handleStartWorker(componentLeaderApi: ComponentLeaderApi, message: StartWorkerActor)(implicit context: ActorContext): Unit = {
+  private def handleStartWorker(componentLeader: ComponentLeader, message: StartWorkerActor)(implicit context: ActorContext): Unit = {
     // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
     logger.info(s"Starting worker type id: ${message.workerTypeInfo.workerTypeId}")
 
     // Find the related packageLeader who can start the worker
-    val packageInCharge: Option[PackageLeaderApi] = componentLeaderApi.packageLeaders.find(packageLeader => {
+    val packageInCharge: Option[PackageLeaderApi] = componentLeader.packageLeaders.find(packageLeader => {
       packageLeader.workerInfos.exists(workerInfo => {
-        val fullName = Communication.fullActorName(componentLeaderApi.componentName, packageLeader.packageName, workerInfo.shortName)
+        val fullName = Communication.fullActorName(componentLeader.componentName, packageLeader.packageName, workerInfo.shortName)
         fullName == message.workerTypeInfo.workerTypeId
       })
     })

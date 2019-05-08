@@ -3,11 +3,14 @@ package net.degols.libs.cluster.core
 import akka.actor.{ActorContext, ActorRef}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.messages._
-import net.degols.libs.cluster.{ClusterTools => ClusterTools}
+import net.degols.libs.cluster.ClusterTools
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success, Try}
 import javax.inject.{Inject, Singleton}
+import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi}
+
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Basic API to the Cluster class for internal use only. This avoid exposing too much the Cluster class.
@@ -15,8 +18,9 @@ import javax.inject.{Inject, Singleton}
   * does not handle the load balancing in itself
   */
 @Singleton
-class ClusterManagement(context: ActorContext, val cluster: Cluster) {
+class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConfiguration: ClusterConfiguration) {
   private val logger = LoggerFactory.getLogger(getClass)
+  implicit val ec: ExecutionContext = clusterConfiguration.executionContext
 
   // If the manager is a follower, it will simply overrides this ClusterTopology based on what it receives from a leader
   // That way we can easily handle a switch of Manager without downtime. At that moment it will need to re-construct the internal Cluster class
@@ -92,12 +96,12 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
     cluster.cleanOldWorkers()
   }
 
-  def distributeWorkers(loadBalancers: Seq[LoadBalancer], softDistribution: Boolean): Unit = {
+  def distributeWorkers(loadBalancers: Seq[LoadBalancer], softDistribution: Boolean): Future[Seq[Try[Unit]]] = {
     // Lookup to easily find the orders for a given workerType
     val orders = cluster.ordersByWorkerTypeId()
 
     // For each WorkerType we need to find the appropriate load balancer, then ask him to do the work distribution
-    cluster.nodesByWorkerType().keys
+    val workerOrdersAndTypes: Iterable[(WorkerType, WorkerTypeOrder)] = cluster.nodesByWorkerType().keys
       .flatMap(workerType => {
         // We execute the load balancer for every order we have for the given workerType
         val ordersForType = orders.getOrElse(workerType.workerTypeInfo.workerTypeId, List.empty[WorkerTypeOrder])
@@ -105,36 +109,45 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster) {
 
         if(ordersForType.size >= 2) {
           logger.info(s"We have ${ordersForType.size} different orders for ${workerType.workerTypeInfo.workerTypeId}")
-        } else if (ordersForType.isEmpty)(
+        } else if (ordersForType.isEmpty) {
           // We cannot simply stop all related actors, as we also need to handle the lost of specific orders, in that
           // case we need to specifically target actors related to the lost orders. Because of that, we directly stop
           // the actors of a related workOrder as soon as we received the Terminated message
           logger.warn(s"There is no remaining orders for ${workerType.workerTypeInfo.workerTypeId}, normally no related" +
             s" actors should exist anymore (to verify).")
-        )
+        }
 
         ordersForType
       })
-      .foreach(raw => {
+
+    // Execute the load balancing, one workerTypeOrder at a time. This must be fast to avoid problem with actor queue
+    // filling up if we take too much time here.
+    ClusterTools.foldFutures(workerOrdersAndTypes.toIterator, (raw: (WorkerType, WorkerTypeOrder)) => {
+      Future {
         val workerType = raw._1
         val order = raw._2
 
         // Find the appropriate load balancer for the current order & type
         loadBalancers.find(_.isLoadBalancerType(order.loadBalancerType)) match {
           case Some(loadBal) =>
-            Try{
-              if(softDistribution) {
-                loadBal.softWorkDistribution(workerType, order)
-              } else {
-                loadBal.hardWorkDistribution(workerType, order)
-              }
-            } match {
-              case Success(res) => // Nothing to do
-              case Failure(err) => logger.error(s"Exception occurred while trying to distribute the work of $workerType: ${ClusterTools.formatStacktrace(err)}")
+            val distribution = if(softDistribution) {
+              loadBal.softWorkDistribution(workerType, order)
+            } else {
+              loadBal.hardWorkDistribution(workerType, order)
+            }
+
+            distribution.transformWith{
+              case Success(res) =>
+                Future.successful{}
+              case Failure(err) =>
+                logger.error(s"Exception occurred while trying to distribute the work of $workerType", err)
+                Future.successful{} // Even if there we as a problem, we do not care
             }
           case None =>
             logger.error(s"There is no loadBalancer accepting the type ${order.loadBalancerType}!")
+            Future.successful{}
         }
+      }.flatten
     })
   }
 

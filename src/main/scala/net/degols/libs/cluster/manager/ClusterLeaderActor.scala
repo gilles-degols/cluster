@@ -4,13 +4,15 @@ import akka.actor.{Actor, ActorRef, Cancellable, Kill, Props, Terminated}
 import com.google.inject.{Inject, Singleton}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.core.Cluster
-import net.degols.libs.cluster.{ClusterConfiguration, ClusterTools}
+import net.degols.libs.cluster.ClusterTools
+import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import net.degols.libs.cluster.messages._
+import net.degols.libs.cluster.utils.PriorityStashedActor
 import net.degols.libs.election._
 import org.slf4j.LoggerFactory
 import play.api.libs.json.{JsObject, Json}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -53,42 +55,18 @@ case class WorkerOrder(fullName: String, balancerType: LoadBalancerType, metadat
 @Singleton
 class ClusterLeaderActor @Inject()(
                                     componentLeaderApi: ComponentLeaderApi, // Implemented by the developer
+                                    clusterConfigurationApi: ClusterConfigurationApi, // The developer can override it
                                     service: ClusterServiceLeader,
                                     electionService: ElectionService,
-                                    configurationService: ConfigurationService,
-                                    clusterConfiguration: ClusterConfiguration,
-                                    cluster: Cluster)(implicit val ec: ExecutionContext) extends Actor{
+                                    configurationService: ConfigurationService) extends PriorityStashedActor{
   private val logger = LoggerFactory.getLogger(getClass)
 
-  service.nodeInfo = Option {
-    val networkHostname = ClusterTools.remoteActorPath(self).split("@")(1).split(":").head
-    val localHostname = clusterConfiguration.localHostname
-    NodeInfo(networkHostname, localHostname)
-  }
-
-  service.jvmTopology = JVMTopology(self)
 
   /**
-    * Start the local Manager in charge of the election. It's not necessarily the manager in charge
+    * Local Manager in charge of the election. It's not necessarily the manager in charge.
+    * It is created after we initialze the ClusterConfiguration, PackageLeaders & LoadBalancers
     */
-  val localManager: ActorRef = context.actorOf(Props.create(classOf[Manager], electionService, configurationService, clusterConfiguration, cluster), name = "LocalManager")
-  override def preStart(): Unit = {
-    super.preStart()
-
-    // Put the reference to ClusterServiceLeader for each PackageLeader
-    componentLeaderApi.packageLeaders.foreach(pck => {
-      pck.setContext(context)
-      pck.setClusterServiceLeader(service)
-    })
-
-    // Set up the different workers
-    componentLeaderApi.packageLeaders.foreach(pck => {
-      pck.setupWorkers()
-    })
-
-    // Inform the localManager of our existence and give the optional UserLoadBalancer objects
-    localManager ! IAmTheWorkerLeader(componentLeaderApi.loadBalancers)
-  }
+  var localManager: Option[ActorRef] = None
 
   /**
     * Scheduled message to verify if we are still disconnected from the manager in charge after some time. If yes, we
@@ -96,27 +74,125 @@ class ClusterLeaderActor @Inject()(
     */
   private var checkManagerDisconnection: Option[Cancellable] = None
 
+  /**
+    * Easier-to-use configuration
+    */
+  private var _clusterConfiguration: Option[ClusterConfiguration] = None
+
+  /**
+    * Easier-to-use ComponentLeader
+    */
+  private var _componentLeader: Option[ComponentLeader] = None
+
+  private var _cluster: Option[Cluster] = None
+
+  /**
+    * Load configuration and setup the different packages & their workers
+    */
+  def load(): Future[(ClusterConfiguration, Seq[PackageLeaderApi], Seq[LoadBalancer])] = {
+    for {
+      // Loading the configuration
+      clusterConfiguration <- ClusterConfiguration.load(clusterConfigurationApi)
+
+      // Put the reference to ClusterServiceLeader for each PackageLeader
+      packageLeaders <- componentLeaderApi.packageLeaders.map(packageLeaders => {
+        packageLeaders.foreach(pck => {
+          pck.setContext(context)
+          pck.setClusterServiceLeader(service)
+        })
+        packageLeaders
+      })
+
+      // Setting up the workers
+      setupWorkers <- ClusterTools.foldFutures(packageLeaders.toIterator, (pck: PackageLeaderApi) => {
+        pck.setupWorkers().andThen{
+          case Success(r) => logger.debug(s"Workers setup done for package $pck")
+          case Failure(e) => logger.error(s"Impossible to setup the worker for package $pck", e)
+        }
+      })
+
+      componentLeader <- ComponentLeader.from(componentLeaderApi)
+
+      // Get the different load balancers
+      loadBalancers <- componentLeaderApi.loadBalancers
+    } yield {
+      service.nodeInfo = Option {
+        val networkHostname = ClusterTools.remoteActorPath(self).split("@")(1).split(":").head
+        val localHostname = clusterConfiguration.localHostname
+        NodeInfo(networkHostname, localHostname)
+      }
+
+      service.jvmTopology = JVMTopology(self)
+      _clusterConfiguration = Option(clusterConfiguration)
+      _componentLeader = Option(componentLeader)
+      _cluster = Option(new Cluster(clusterConfiguration))
+
+      (clusterConfiguration, packageLeaders, loadBalancers)
+    }
+  }
+
+  override def preStart(): Unit = {
+    super.preStart()
+
+    // As the local manager is only started after the initialization is successfully done, there is no need to have like
+    // a "StartActor" message with different states.
+    load().transform{
+      case Success(r) =>
+        logger.debug("Loaded the default cluster configuration, packageLeaders and their workers. We try to start the local manager")
+
+        localManager = Option(context.actorOf(Props.create(classOf[Manager], electionService, configurationService, r._1, _cluster.get), name = "LocalManager"))
+        localManager.get ! IAmTheWorkerLeader(r._3)
+
+        Success(r)
+      case Failure(e) =>
+        logger.error("Impossible to initialize the default configuration, different packageLeaders & their workers", e)
+        self ! Kill
+        Failure(e)
+    }
+  }
+
+  /**
+    *
+    * @return
+    */
+  def starting: Receive = {
+    case StartActor =>
+      logger.debug("Received 'StartActor' message for the ClusterLeaderActor, initializing...")
+    case other =>
+      logger.error(s"Received unknown message while being in the state 'starting': $other")
+  }
+
 
   // TODO: Add suicide when we didn't get a new Manager in a short amount of time. Or better: send a message to all
   // actors to stop their work, and it will be resumed by the manager
   override def receive: Receive = {
     case message: TheLeaderIs => // We only receive a "TheLeaderIs" if the state changed
       logger.warn(s"Got a TheLeaderIs message from the manager: $message")
-      service.manager = message.leaderWrapper // message.leader is only used for the election != cluster management as the cluster management owns the election actor.
-      // We need to send all worker type info (even if the manager has just switched, we don't care)
-      service.notifyWorkerTypeInfo(componentLeaderApi)
+      val f = Future {
+        service.manager = message.leaderWrapper // message.leader is only used for the election != cluster management as the cluster management owns the election actor.
+        // We need to send all worker type info (even if the manager has just switched, we don't care)
+        service.notifyWorkerTypeInfo(_componentLeader.get)
 
-      // Set up of the packageLeaders is done, we can execute the post-start of the packageLeaders (most of the time
-      // they contain nothing)
-      message.leader.foreach(x => {
-        componentLeaderApi.packageLeaders.foreach(pck => {
-          pck.postManagerConnection()
-        })
-      })
+        // Set up of the packageLeaders is done, we can execute the post-start of the packageLeaders (most of the time
+        // they contain nothing)
+        message.leader.map(x => {
+          ClusterTools.foldFutures(_componentLeader.get.packageLeaders.toIterator, (pck: PackageLeaderApi) => {
+            pck.postManagerConnection()
+          })
+        }).getOrElse(Future.successful{})
+      }.flatten.andThen{
+        case Success(r) => // Nothing to do
+        case Failure(e) =>
+          logger.error("Impossible to send all the WorkerTypeInfo and/or executing the postManagerConnection for every packageLeader", e)
+      }
+
+      endProcessing(message, f)
 
     case clusterMessage: ClusterRemoteMessage =>
       // Message used for the administration, we execute it
-      service.handleClusterRemoteMessage(componentLeaderApi, clusterMessage)
+      service.handleClusterRemoteMessage(_componentLeader.get, clusterMessage)
+
+      endProcessing(clusterMessage)
 
     case IsStillDisconnectedFromManager =>
       service.manager match {
@@ -127,19 +203,31 @@ class ClusterLeaderActor @Inject()(
           service.jvmTopology.workerActors.values.flatMap(_.map(_.actorRef)).foreach(_ ! Kill)
       }
 
+      endProcessing(IsStillDisconnectedFromManager)
+
     case terminatingActor: Terminated =>
-      // We watch our own actors, but also the Manager
-      if(service.jvmTopology.removeWorkerActor(terminatingActor.actor)) {
-        logger.warn(s"Got a Terminated message from a WorkerActor (${terminatingActor.actor}), it has been removed from our jvm topology.")
-      } else if(service.manager.isDefined && service.manager.get == terminatingActor.actor) {
-        checkManagerDisconnection.map(c => c.cancel())
-        logger.warn(s"Got a Terminated message from the Manager, we let the actors continue their job during ${clusterConfiguration.watcherTimeoutBeforeSuicide.toSeconds} seconds and wait for a new Manager to come in.")
-        checkManagerDisconnection = Option(context.system.scheduler.scheduleOnce(clusterConfiguration.watcherTimeoutBeforeSuicide, self, IsStillDisconnectedFromManager))
-      } else {
-        logger.error(s"Got a Terminated message from a unknown actor: ${terminatingActor.actor}")
+      Try {
+        // We watch our own actors, but also the Manager
+        if(service.jvmTopology.removeWorkerActor(terminatingActor.actor)) {
+          logger.warn(s"Got a Terminated message from a WorkerActor (${terminatingActor.actor}), it has been removed from our jvm topology.")
+        } else if(service.manager.isDefined && service.manager.get == terminatingActor.actor) {
+          checkManagerDisconnection.map(c => c.cancel())
+          logger.warn(s"Got a Terminated message from the Manager, we let the actors continue their job during ${_clusterConfiguration.get.watcherTimeoutBeforeSuicide.toSeconds} seconds and wait for a new Manager to come in.")
+          checkManagerDisconnection = Option(context.system.scheduler.scheduleOnce(_clusterConfiguration.get.watcherTimeoutBeforeSuicide, self, IsStillDisconnectedFromManager))
+        } else {
+          logger.error(s"Got a Terminated message from a unknown actor: ${terminatingActor.actor}")
+        }
+      } match {
+        case Success(r) =>
+        case Failure(e) =>
+          logger.error(s"Problem while logging a Terminated Actor: $terminatingActor", e)
       }
+
+      endProcessing(terminatingActor)
+
     case x =>
       logger.error(s"Unknown message: $x . Note that you should not use the WorkerLeader for your own messages as they are not forwarded.")
+      endProcessing(x)
   }
 
 }

@@ -6,6 +6,8 @@ import net.degols.libs.cluster.core.{Cluster, ClusterManagement, WorkerType}
 import net.degols.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.LoggerFactory
 
+import scala.concurrent.{ExecutionContext, Future}
+
 /**
   * In charge of the load balancing of the Manager.  Only a limited subset of the methods must be implemented to provide a custom load balancer.
   * To ease the extension of this class, some attributes are not automatically asked at creation. They are only set up
@@ -30,7 +32,7 @@ abstract class LoadBalancer {
     * This method is called from time to time. The "soft" mode is called every few seconds to create missing actors, the "hard" mode
     * is called once every few minutes to optionally stop actors in some JVMs and start them elsewhere.
     */
-  def softWorkDistribution(workerType: WorkerType, order: WorkerTypeOrder): Unit
+  def softWorkDistribution(workerType: WorkerType, order: WorkerTypeOrder)(implicit ec: ExecutionContext): Future[Unit]
 
-  def hardWorkDistribution(workerType: WorkerType, order: WorkerTypeOrder): Unit
+  def hardWorkDistribution(workerType: WorkerType, order: WorkerTypeOrder)(implicit ec: ExecutionContext): Future[Unit]
 }

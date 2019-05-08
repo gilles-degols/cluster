@@ -9,7 +9,6 @@ import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
 import net.degols.libs.cluster.messages.{GetActorRefsFor, GetAllWorkerTypeIds, MissingActor, WorkerActorHealth, WorkerTypeOrder}
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 case class RemoteReply(content: Any)
@@ -116,6 +115,7 @@ class Communication(service: ClusterServiceLeader) {
   }
 
   def sendWithReply(workerTypeId: String, message: Any)(implicit timeout: Timeout, context: ActorContext): Future[RemoteReply] = {
+    implicit val ac = context.dispatcher
     actorRefsForId(workerTypeId)
       .flatMap(actorRefs => {
         if(actorRefs.nonEmpty) {
@@ -129,6 +129,7 @@ class Communication(service: ClusterServiceLeader) {
   }
 
   def sendWithReply(actorRef: ActorRef, message: Any)(implicit timeout: Timeout, context: ActorContext): Future[RemoteReply] = {
+    implicit val ac = context.dispatcher
     actorRef.ask(message)(timeout.duration).map(raw => RemoteReply(raw))
   }
 

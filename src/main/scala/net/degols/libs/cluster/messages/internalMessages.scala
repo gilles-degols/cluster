@@ -12,3 +12,8 @@ class MissingActor(message: String) extends ClusterException(message)
 
 case class DistributeWork(soft: Boolean)
 case class CleanOldWorkers()
+
+/**
+  * Message typically sent after an initial configuration has just been charged, to only start the real work.
+  */
+case object StartActor

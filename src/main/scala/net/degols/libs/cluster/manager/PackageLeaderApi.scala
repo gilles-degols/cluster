@@ -5,6 +5,7 @@ import net.degols.libs.cluster.messages.UnknownWorker
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Specify the different available W
@@ -45,7 +46,7 @@ trait PackageLeaderApi {
   /**
     * Small wrapper to avoid creating all workers in the initialization phase of the class
     */
-  def setupWorkers(): Unit
+  def setupWorkers(): Future[Unit]
 
   /**
     * Easy interface for the libraries using the PackageLeader
@@ -60,7 +61,6 @@ trait PackageLeaderApi {
     */
   def startWorker(work: StartWorkerWrapper): ActorRef = {
     logger.debug(s"Try to start the worker for the package $packageName and shortName: ${work.shortName}")
-    logger.error(s" ====> Try to start the worker for the package $packageName and shortName: ${work.shortName}")
     workers.find(_._1.shortName == work.shortName) match {
       case Some(res) =>
         res._2(work)
@@ -83,5 +83,5 @@ trait PackageLeaderApi {
     * Method called once after the setup of _context and ClusterServiceLeader and once the manager is connected.
     * Could typically be used to send WorkerOrder
     */
-  def postManagerConnection(): Unit = Unit
+  def postManagerConnection()(implicit ec: ExecutionContext): Future[Unit] = Future.successful{}
 }

@@ -3,12 +3,13 @@ package net.degols.libs.cluster.core
 import javax.inject.Singleton
 import akka.actor.{ActorContext, ActorRef, ActorSystem}
 import com.google.inject.Inject
-import net.degols.libs.cluster.ClusterConfiguration
+import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import net.degols.libs.cluster.messages._
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Random, Success, Try}
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   *
@@ -20,9 +21,9 @@ case class WorkerTypeOrderWrapper(order: WorkerTypeOrder, actors: mutable.Set[Ac
 /**
   * General interface to access information about the cluster
   */
-@Singleton
-class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
+class Cluster(clusterConfiguration: ClusterConfiguration) {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
+  implicit val ec: ExecutionContext = clusterConfiguration.executionContext
 
   /**
     * All WorkerTypeOrder received from any JVM of the cluster. The duplicate orders are automatically removed before
@@ -30,7 +31,7 @@ class Cluster @Inject()(clusterConfiguration: ClusterConfiguration) {
     * Orders will be automatically removed if all the related JVM initiating the orders are dead
     * TODO: Avoid going through 1000s elements for each soft-work distribution
     */
-  private var _orders: mutable.Map[String, WorkerTypeOrderWrapper] = mutable.Map[String, WorkerTypeOrderWrapper]()
+  private val _orders: mutable.Map[String, WorkerTypeOrderWrapper] = mutable.Map[String, WorkerTypeOrderWrapper]()
 
   /**
     * All instances of Nodes found on the cluster

@@ -1,10 +1,9 @@
 package net.degols.libs.cluster.manager
 
 import javax.inject.{Inject, Singleton}
-
 import akka.actor.{ActorRef, Cancellable, Terminated}
-import net.degols.libs.cluster.ClusterConfiguration
 import net.degols.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
+import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import net.degols.libs.cluster.core.{Cluster, ClusterManagement}
 import net.degols.libs.cluster.messages._
 import net.degols.libs.election._
@@ -23,7 +22,7 @@ import scala.util.{Failure, Success, Try}
   * @param clusterConfiguration
   */
 @Singleton
-final class Manager @Inject()(electionService: ElectionService,
+final class Manager(electionService: ElectionService,
                               configurationService: ConfigurationService,
                               clusterConfiguration: ClusterConfiguration,
                               cluster: Cluster)
@@ -44,7 +43,7 @@ final class Manager @Inject()(electionService: ElectionService,
     * The clusterManagement and LoadBalancer should do nothing by themselves to distribute work or so on. They should
     * rely on automatic calls to a limited number of methods
     */
-  protected val clusterManagement = new ClusterManagement(context, cluster)
+  protected val clusterManagement = new ClusterManagement(context, cluster, clusterConfiguration)
 
   /**
     * Custom User LoadBalancer, they do not need to exist, it's just for advanced users. They can be set by the workerLeader once
