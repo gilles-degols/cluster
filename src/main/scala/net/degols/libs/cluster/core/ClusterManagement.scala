@@ -52,6 +52,14 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
   }
 
   /**
+    * Return some information about an actorRef
+    */
+  def infoFromActorRef(actorRef: ActorRef): Option[InfoFromActorRef] = {
+    _clusterTopology.workerActors.values.flatten.find(_.workerActorRef == actorRef)
+      .map(info => InfoFromActorRef(context.self, actorRef, info.workerTypeId, info.workerTypeOrder))
+  }
+
+  /**
     * Return the list of WorkerTypeId
     */
   def existingWorkerTypeIds(): Seq[String] = {

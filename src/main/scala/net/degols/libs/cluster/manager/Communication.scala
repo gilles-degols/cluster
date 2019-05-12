@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
-import net.degols.libs.cluster.messages.{GetActorRefsFor, GetAllWorkerTypeIds, MissingActor, WorkerActorHealth, WorkerTypeOrder}
+import net.degols.libs.cluster.messages.{GetActorRefsFor, GetAllWorkerTypeIds, GetInfoFromActorRef, InfoFromActorRef, MissingActor, WorkerActorHealth, WorkerTypeOrder}
 
 import scala.concurrent.duration._
 
@@ -18,6 +18,26 @@ case class RemoteReply(content: Any)
   */
 class Communication(service: ClusterServiceLeader) {
   private val logger = LoggerFactory.getLogger(getClass)
+
+  /**
+    * Return information about an actorRef. Typically useful to find our own orderId
+    */
+  def infoFromActorRef(targetActorRef: ActorRef)(implicit context: ActorContext): Future[Option[InfoFromActorRef]] = {
+    implicit val sender = context.self
+    implicit val ac = context.dispatcher
+    val m = GetInfoFromActorRef(sender, targetActorRef)
+
+    service.askClusterInfo(m)
+      .transform{
+        case Success(r) =>
+          Success(r)
+        case Failure(e) =>
+          logger.error("Problem while fetching data from the manager", e)
+          Success(None)
+      }.map(res => {
+      res.flatMap(_.asInstanceOf[Option[InfoFromActorRef]])
+    })
+  }
 
   /**
     * ActorRefs matching the given WorkerTypeId and the OrderId

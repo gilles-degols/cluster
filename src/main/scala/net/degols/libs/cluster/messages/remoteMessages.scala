@@ -90,6 +90,15 @@ object WorkerTypeInfo {
 trait ClusterInfo
 
 /**
+  * Ask some information about a given ActorRef. The manager will reply with an "Option[InfoFromActorRef]"
+  */
+@SerialVersionUID(0L)
+case class GetInfoFromActorRef(actorRef: ActorRef, targetActorRef: ActorRef) extends ClusterRemoteMessage(actorRef) with ClusterInfo
+
+@SerialVersionUID(0L)
+case class InfoFromActorRef(actorRef: ActorRef, targetActorRef: ActorRef, workerTypeId: String, workerTypeOrder: WorkerTypeOrder) extends ClusterRemoteMessage(actorRef) with ClusterInfo
+
+/**
   * A worker might want to contact other workers. To avoid sending the entire system topology to each worker, when needed,
   * the worker contacts the Manager to know which actors are available for a given WorkerType.
   * This system is not meant to be used for every message, otherwise the manager will be overloaded. A Cache system

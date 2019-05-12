@@ -142,6 +142,9 @@ final class Manager(electionService: ElectionService,
       case message: FailedWorkerActor =>
         logger.debug(s"Register FailedWorkerActor: $message")
         clusterManagement.registerFailedWorkerActor(message)
+      case message: GetInfoFromActorRef =>
+        logger.debug(s"Worker ${sender()} is asking some information about the actorRef ${message.targetActorRef}")
+        sender() ! clusterManagement.infoFromActorRef(message.targetActorRef)
       case message: GetActorRefsFor =>
         logger.debug(s"Worker ${sender()} is asking for the ActorRefs of workerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
         Try {
