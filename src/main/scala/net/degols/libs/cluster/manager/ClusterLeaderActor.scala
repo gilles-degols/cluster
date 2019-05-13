@@ -49,6 +49,11 @@ case class WorkerOrder(fullName: String, balancerType: LoadBalancerType, metadat
 
 
 /**
+  * If there was a problem to send some information to the manager, re-send the local configuration (WorkerTypeInfo & Order typically)
+  */
+case object ResendConfigurationToManager
+
+/**
   * Manage the various Workers in the current JVM, only one instance is allowed, hence the Singleton. This is the actor
   * knowing which WorkerActors are available, and how to start them.
   */
@@ -151,48 +156,56 @@ class ClusterLeaderActor @Inject()(
     }
   }
 
-  /**
-    *
-    * @return
-    */
-  def starting: Receive = {
-    case StartActor =>
-      logger.debug("Received 'StartActor' message for the ClusterLeaderActor, initializing...")
-    case other =>
-      logger.error(s"Received unknown message while being in the state 'starting': $other")
-  }
+  private def sendInfoToManager(): Future[Unit] = {
+    val f = for {
+      notifyWorkerTypeInfo <- service.notifyWorkerTypeInfo(_componentLeader.get)
+      postManagerConnections <- ClusterTools.foldFutures(_componentLeader.get.packageLeaders.toIterator, (pck: PackageLeaderApi) => {pck.postManagerConnection()})
+    } yield {
+      logger.debug("Successfully sent the WorkerTypeInfos & Orders to the manager, and executed the postManagerConnections.")
+    }
 
+    f.andThen{
+      case Failure(r) =>
+        logger.error("Failure to send the WorkerTypeInfos, Orders to the manager, re-schedule ResendConfigurationToManager", r)
+        context.system.scheduler.scheduleOnce(30 seconds, self, ResendConfigurationToManager)
+    }
+  }
 
   // TODO: Add suicide when we didn't get a new Manager in a short amount of time. Or better: send a message to all
   // actors to stop their work, and it will be resumed by the manager
   override def receive: Receive = {
+    case ResendConfigurationToManager =>
+      logger.debug("Send configuration to the manager")
+      val f = sendInfoToManager()
+      endProcessing(ResendConfigurationToManager, f)
+
     case message: TheLeaderIs => // We only receive a "TheLeaderIs" if the state changed
       logger.warn(s"Got a TheLeaderIs message from the manager: $message")
-      val f = Future {
-        service.manager = message.leaderWrapper // message.leader is only used for the election != cluster management as the cluster management owns the election actor.
-        // We need to send all worker type info (even if the manager has just switched, we don't care)
-        service.notifyWorkerTypeInfo(_componentLeader.get)
+      val f = message.leader match {
+        case Some(leaderRef) =>
+          Future {
+            service.manager = message.leaderWrapper // message.leader is only used for the election != cluster management as the cluster management owns the election actor.
 
-        // Set up of the packageLeaders is done, we can execute the post-start of the packageLeaders (most of the time
-        // they contain nothing)
-        message.leader.map(x => {
-          ClusterTools.foldFutures(_componentLeader.get.packageLeaders.toIterator, (pck: PackageLeaderApi) => {
-            pck.postManagerConnection()
-          })
-        }).getOrElse(Future.successful{})
-      }.flatten.andThen{
-        case Success(r) => // Nothing to do
-        case Failure(e) =>
-          logger.error("Impossible to send all the WorkerTypeInfo and/or executing the postManagerConnection for every packageLeader", e)
+            // We need to send all worker type info (even if the manager has just switched, we don't care) & execute
+            // the postManagerConnection
+            sendInfoToManager()
+          }.flatten.andThen{
+            case Success(r) => // Nothing to do
+            case Failure(e) =>
+              logger.error("Impossible to send all the WorkerTypeInfo and/or executing the postManagerConnection for every packageLeader", e)
+          }
+        case None =>
+          logger.warn(s"No leader received in $message, do nothing.")
+          Future.successful{}
       }
+
 
       endProcessing(message, f)
 
     case clusterMessage: ClusterRemoteMessage =>
       // Message used for the administration, we execute it
-      service.handleClusterRemoteMessage(_componentLeader.get, clusterMessage)
-
-      endProcessing(clusterMessage)
+      val f = service.handleClusterRemoteMessage(_componentLeader.get, clusterMessage)
+      endProcessing(clusterMessage, f)
 
     case IsStillDisconnectedFromManager =>
       service.manager match {
@@ -202,7 +215,6 @@ class ClusterLeaderActor @Inject()(
           logger.warn("We just re-check if we are still disconnected from the Manager and it seems we still don't have it, so we kill all our workers.")
           service.jvmTopology.workerActors.values.flatMap(_.map(_.actorRef)).foreach(_ ! Kill)
       }
-
       endProcessing(IsStillDisconnectedFromManager)
 
     case terminatingActor: Terminated =>
@@ -222,7 +234,6 @@ class ClusterLeaderActor @Inject()(
         case Failure(e) =>
           logger.error(s"Problem while logging a Terminated Actor: $terminatingActor", e)
       }
-
       endProcessing(terminatingActor)
 
     case x =>

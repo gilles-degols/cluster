@@ -6,7 +6,7 @@ import akka.actor.{ActorContext, ActorRef, Cancellable}
 import akka.util.Timeout
 import javax.inject.{Inject, Singleton}
 import net.degols.libs.cluster.ClusterTools
-import net.degols.libs.cluster.messages.{ClusterInfo, ClusterRemoteMessage, ClusterTopology, FailedWorkerActor, JVMTopology, NodeInfo, StartWorkerActor, StartedWorkerActor, WorkerActorHealth, WorkerTypeInfo, WorkerTypeOrder}
+import net.degols.libs.cluster.messages.{ClusterInfo, ClusterRemoteMessage, ClusterTopology, FailedWorkerActor, JVMTopology, MissingManager, MissingPackageLeader, NodeInfo, StartWorkerActor, StartedWorkerActor, WorkerActorHealth, WorkerTypeInfo, WorkerTypeOrder}
 import org.slf4j.LoggerFactory
 import akka.pattern.ask
 import com.github.benmanes.caffeine.cache.Caffeine
@@ -150,41 +150,66 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
   /**
     * Send all WorkerInfo to the Manager
     */
-  private[manager] def notifyWorkerTypeInfo(componentLeader: ComponentLeader)(implicit context: ActorContext): Unit = {
+  private[manager] def notifyWorkerTypeInfo(componentLeader: ComponentLeader)(implicit context: ActorContext): Future[Seq[Any]] = {
     manager match {
       case Some(currentManager) =>
         logger.debug(s"Send all workerTypeInfo to the manager $currentManager")
-        componentLeader.packageLeaders.foreach(packageLeader => {
-          packageLeader.workerInfos.foreach(workerInfo => {
-            // First send the workerTypeInfo
-            val workerTypeInfo = convertWorkerInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
-            workerTypeInfo.nodeInfo = nodeInfo.get
-            currentManager ! workerTypeInfo
+        val packageAndWorkers = componentLeader.packageLeaders.flatMap(packageLeader => packageLeader.workerInfos.map(workerInfo => (packageLeader, workerInfo)))
 
-            // If there is balancer, we can directly send the WorkerOrder to the manager
-            loadWorkerOrderFromInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
-              .foreach(order => {
-                currentManager ! communication.convertWorkerOrder(order)
+        val allMessages = ClusterTools.foldFutures(packageAndWorkers.toIterator, (rawInfo: (PackageLeaderApi, WorkerInfo)) => {
+          val packageLeader = rawInfo._1
+          val workerInfo = rawInfo._2
+
+          // First send the workerTypeInfo
+          val workerTypeInfo = convertWorkerInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
+          workerTypeInfo.nodeInfo = nodeInfo.get
+          implicit val timeout: Timeout = 10 seconds
+
+          val sendInfo = communication.sendInfoToManager(workerTypeInfo)
+              .flatMap(result => {
+                // If there is balancer, we can directly send the WorkerOrder to the manager
+                loadWorkerOrderFromInfo(componentLeader.componentName, packageLeader.packageName, workerInfo) match {
+                  case Some(order) =>
+                    communication.sendWorkerOrder(order)
+                  case None =>
+                    logger.debug(s"No WorkerOrder given for $workerTypeInfo, it must be sent manually afterwards in that case!")
+                    Future{Unit}
+                }
               })
-          })
-        })
 
+          sendInfo.andThen {
+            case Failure(e) =>
+              logger.error(s"Failure while sending the $workerTypeInfo to the manager", e)
+          }
+
+          sendInfo
+        }, stopOnFailure = true)
+
+        // Make the future fails if there was one failure
+        allMessages.map(_.map(_.get))
       case None => // Nothing to do
         logger.error("Not possible to notify the Manager about our WorkerInfo as none is found...")
+        Future{throw new MissingManager("Manager not yet available")}
     }
   }
 
   /**
     * Handle some cluster messages, so nothing related to the election system in itself;
     */
-  private[manager] def handleClusterRemoteMessage(componentLeader: ComponentLeader, clusterRemoteMessage: ClusterRemoteMessage)(implicit context: ActorContext) = Try {
-    // The entire method is surrounded by a Try to be sure we don't crash for any reason. But we should handle every
-    // message correctly by default
-    clusterRemoteMessage match {
-      case message: StartWorkerActor =>
-        handleStartWorker(componentLeader, message)
-      case x =>
-        logger.error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")
+  private[manager] def handleClusterRemoteMessage(componentLeader: ComponentLeader, clusterRemoteMessage: ClusterRemoteMessage)(implicit context: ActorContext): Future[Unit.type] = {
+    Future{
+      // The entire method is surrounded by a Future to be sure we don't crash for any reason. But we should handle every
+      // message correctly by default
+      clusterRemoteMessage match {
+        case message: StartWorkerActor =>
+          handleStartWorker(componentLeader, message)
+        case x =>
+          logger.error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")
+          Future{Unit}
+      }
+    }.flatten.andThen{
+      case Failure(e) =>
+        logger.error(s"Impossible to handle the message $clusterRemoteMessage received from the manager", e)
     }
   }
 
@@ -192,7 +217,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
     * In charge of handling a StartWorkerActor message received from the manager, and try to start it
     * @param message
     */
-  private def handleStartWorker(componentLeader: ComponentLeader, message: StartWorkerActor)(implicit context: ActorContext): Unit = {
+  private def handleStartWorker(componentLeader: ComponentLeader, message: StartWorkerActor)(implicit context: ActorContext): Future[Unit.type] = {
     // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
     logger.info(s"Starting worker type id: ${message.workerTypeInfo.workerTypeId}")
 
@@ -209,11 +234,12 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
         startWorker(p, message)
       case None =>
         logger.error(s"No PackageLeader available to start the workerTypeId ${message.workerTypeInfo.workerTypeId}")
+        Future{throw new MissingPackageLeader(s"No packageLeader available to start ${message.workerTypeInfo.workerTypeId}, this should never happen. Probably an internal error to the library.")}
     }
   }
 
 
-  private def startWorker(packageLeaderApi: PackageLeaderApi, message: StartWorkerActor)(implicit context: ActorContext): Unit = {
+  private def startWorker(packageLeaderApi: PackageLeaderApi, message: StartWorkerActor)(implicit context: ActorContext): Future[Unit.type] = {
     val initialName = message.workerTypeInfo.workerTypeId.split(":").drop(2).mkString(":")
     val workerName = s"${message.workerTypeInfo.workerTypeId}-$startedWorkers"
     startedWorkers += 1
@@ -228,23 +254,31 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
             jvmTopology.addWorkerActor(workerActorHealth)
             val m = StartedWorkerActor(context.self, message, res)
             m.nodeInfo = nodeInfo.get
-            message.actorRef ! m
-            message.actorRef ! workerActorHealth
+
+            for {
+              resultStarted <- communication.sendInfoToManager(m, Option(message.actorRef))
+              resultHealth <- communication.sendInfoToManager(m, Option(message.actorRef))
+            } yield {
+              resultStarted
+            }
+
           case Failure(e) =>
             logger.error(s"Impossible to set a watcher, the actor probably died mid-way: $e")
             val m = FailedWorkerActor(context.self, message, new Exception("Failing actor after starting it"))
             m.nodeInfo = nodeInfo.get
-            message.actorRef ! m
+
+            communication.sendInfoToManager(m, Option(message.actorRef))
         }
       case Failure(err) =>
         val excep = err match {
           case exception: Exception => exception
           case _ => new Exception(s"Unknown error while starting a workerActor: $err")
         }
-        logger.error(s"Got an exception while trying to start a worker ${initialName}: ${ClusterTools.formatStacktrace(excep)}")
+        logger.error(s"Got an exception while trying to start a worker $initialName: ${ClusterTools.formatStacktrace(excep)}")
         val m = FailedWorkerActor(context.self, message, excep)
         m.nodeInfo = nodeInfo.get
-        message.actorRef ! m
+
+        communication.sendInfoToManager(m, Option(message.actorRef))
     }
   }
 }

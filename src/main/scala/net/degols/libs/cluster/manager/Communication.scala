@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
-import net.degols.libs.cluster.messages.{GetActorRefsFor, GetAllWorkerTypeIds, GetInfoFromActorRef, InfoFromActorRef, MissingActor, WorkerActorHealth, WorkerTypeOrder}
+import net.degols.libs.cluster.messages.{ClusterRemoteMessage, GetActorRefsFor, GetAllWorkerTypeIds, GetInfoFromActorRef, InfoFromActorRef, MessageWasHandled, MissingActor, UnrespondingManager, WorkerActorHealth, WorkerTypeOrder}
 
 import scala.concurrent.duration._
 
@@ -104,16 +104,33 @@ class Communication(service: ClusterServiceLeader) {
 
   /**
     * Send a WorkerOrder to the manager (if it exists)
+    * @return successfull future if it's a success
+    */
+  def sendWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext): Future[Unit.type] = {
+    sendInfoToManager(convertWorkerOrder(workerOrder))
+  }
+
+  /**
+    * Send an arbitrary message to the Manager, and wait for its acknowledgement. We do not care about the result on the
+    * other-side, just that it sent something back
+    * @param managerActorRef optional ActorRef of the Manager that we need to use (instead of the default local manager) to contact it
     * @return
     */
-  def sendWorkerOrder(workerOrder: WorkerOrder)(implicit context: ActorContext): Unit = {
-    service.manager match {
-      case Some(manager) =>
-        logger.debug(s"Sending WorkerOrder ${workerOrder.fullName} - ${workerOrder.id}")
-        manager ! convertWorkerOrder(workerOrder)
+  def sendInfoToManager(message: ClusterRemoteMessage, managerActorRef: Option[ActorRef] = None)(implicit context: ActorContext): Future[Unit.type] = {
+    implicit val ac = context.dispatcher
+    val manager = if(managerActorRef.isDefined) managerActorRef
+    else service.manager
+    manager match {
+      case Some(actorRef) =>
+        logger.debug(s"Sending message $message to Manager")
+        implicit val timeout: Timeout = Timeout(10 seconds)
+
+        (actorRef ? message).map(result => {
+          Unit // We always expect the MessageWasHandled, so as long as we have a successful future, that's all that matter
+        })
       case None =>
-        logger.warn(s"There is no manager available for the moment to send the WorkerOrder $workerOrder!")
-        None
+        logger.warn(s"There is no manager available for the moment to send the message $message!")
+        Future{throw new UnrespondingManager("No manager available for the moment")}
     }
   }
 

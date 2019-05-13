@@ -52,6 +52,14 @@ case class WorkerTypeOrder(actorRef: ActorRef, workerTypeId: String, loadBalance
   override val toString: String = s"WorkerTypeOrder ($id): $workerTypeId / ${ClusterTools.remoteActorPath(actorRef)} @ $creationDatetime"
 }
 
+
+/**
+  * Notification to the sender that the manager has correctly received a message, it does not mean it was successfully
+  * handled (we assume it was). Typically used for the WorkerTypeOrder
+  */
+@SerialVersionUID(1L)
+case class MessageWasHandled(actorRef: ActorRef, message: ClusterRemoteMessage) extends ClusterRemoteMessage(actorRef)
+
 /**
   * Message sent when the system is booting up. The WorkerLeader sent multiple WorkerTypeInfo indicating which actors
   * it is able to start, but it does not start any actor directly, the WorkerTypeOrder still needs to be sent with

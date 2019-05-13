@@ -130,18 +130,23 @@ final class Manager(electionService: ElectionService,
       case message: WorkerTypeInfo =>
         logger.debug(s"Register WorkerTypeInfo: $message")
         clusterManagement.registerWorkerTypeInfo(message)
+        sender() ! MessageWasHandled(context.self,message)
       case message: WorkerTypeOrder =>
         logger.debug(s"Register WorkerTypeOrder: $message")
         clusterManagement.registerWorkerTypeOrder(message)
+        sender() ! MessageWasHandled(context.self,message)
       case message: WorkerActorHealth =>
         logger.debug(s"Register WorkerActorHealth: $message")
         clusterManagement.updateWorkerActorHealth(message)
+        sender() ! MessageWasHandled(context.self,message)
       case message: StartedWorkerActor =>
         logger.debug(s"Register StartedWorkerActor: $message")
         clusterManagement.registerStartedWorkerActor(message)
+        sender() ! MessageWasHandled(context.self,message)
       case message: FailedWorkerActor =>
         logger.debug(s"Register FailedWorkerActor: $message")
         clusterManagement.registerFailedWorkerActor(message)
+        sender() ! MessageWasHandled(context.self,message)
       case message: GetInfoFromActorRef =>
         logger.debug(s"Worker ${sender()} is asking some information about the actorRef ${message.targetActorRef}")
         sender() ! clusterManagement.infoFromActorRef(message.targetActorRef)

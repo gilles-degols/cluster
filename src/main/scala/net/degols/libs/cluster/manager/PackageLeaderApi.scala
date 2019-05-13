@@ -81,7 +81,7 @@ trait PackageLeaderApi {
 
   /**
     * Method called once after the setup of _context and ClusterServiceLeader and once the manager is connected.
-    * Could typically be used to send WorkerOrder
+    * Could typically be used to send WorkerOrder.
     */
   def postManagerConnection(): Future[Unit] = Future.successful{}
 }
