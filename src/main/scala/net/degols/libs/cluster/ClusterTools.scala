@@ -25,6 +25,17 @@ object ClusterTools {
   }
 
   /**
+    * Convert a list of future to a list of futures with Try. Typically useful to use alongside with Future.sequence(...)
+    * @param f
+    * @tparam T
+    * @return
+    */
+  def futureToFutureTry[T](f: Future[T])(implicit ec: ExecutionContext): Future[Try[T]] = {
+    f.map(Success(_)).recover{ case x => Failure(x)}
+  }
+
+
+  /**
     * Fold an iterator of futures together, to process them one by one
     */
   def foldFutures[A, T](iter: Iterator[T], met: T => Future[A], stopOnFailure: Boolean = false)(implicit ec: ExecutionContext): Future[Seq[Try[A]]] = {
@@ -63,6 +74,18 @@ object ClusterTools {
       throw new Exception(s"Missing configuration to have a valid remote actor path for $actorRef.")
     }
     path
+  }
+
+  /**
+    * Verify if two given actorRef belongs to the same JVM. It is useful to send some specific messages for performance
+    * purpose (for example, sending an object reference directly instead of asking the process to reload the same
+    * object from a db).
+    * We use the hostname + port to see if it's the same jvm, nothing more complicated.
+    */
+  def actorsFromSameJVM(sender: ActorRef, receiver: ActorRef): Boolean = {
+    val senderPath = jvmIdFromActorRef(sender).split("//").head.split("/").head
+    val receiverPath = jvmIdFromActorRef(receiver).split("//").head.split("/").head
+    senderPath == receiverPath
   }
 
   def jvmIdFromActorRef(actorRef: ActorRef): String = remoteActorPath(actorRef).replace(".tcp","").replace(".udp","")
