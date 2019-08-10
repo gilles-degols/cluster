@@ -165,8 +165,10 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
     * a lot of identical requests to re-distribute the workers. It is better to simply wait for the SoftWorkerDistribution
     * message automatically sends every few seconds.
     *
-    * If the actorRef is linked to the initiator of a WorkerTypeOrder, remove it. If other sent the same order, no problem.
-    * If no-one is alive anymore, the Cluster will directly remove the related actors
+    * If the actorRef is linked to the initiator of a WorkerTypeOrder, we remove it, and we kill all the created actors,
+    * which will recursively clean the cluster from previously started actors.
+    * If another actor sent the same order, no problem.
+    * If no-one is alive anymore, the Cluster will directly remove the related actors.
     */
   def removeWatchedActor(actorRef: ActorRef): Unit = {
     cluster.registerFailedWorkerOrderSender(context, actorRef)

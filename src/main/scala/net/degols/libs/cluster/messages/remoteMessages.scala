@@ -30,8 +30,15 @@ case object ClusterInstance extends InstanceType
   * Message sent by any JVM asking the Manager to start specific instances of some WorkerTypeId on any JVM.
   * An update of the WorkerTypeInfo can be sent at any moment by a JVM. To be able to differentiate an update versus some
   * new information we use the "id" sent by the JVM (so it's up to the developer to correctly select the "id" field).
-  * This also allows to have multiple JVMs sending the same order but only being executed once (this will happen frequently)
-  * @param actorRef
+  * This also allows to have multiple JVMs sending the same order but only being executed once (this will happen frequently).
+  *
+  * If the actor initiating the WorkerOrder dies, every WorkerOrder instantiated by it will die too, to replicate the
+  * logic of the local actorSystem. This is pretty useful to be sure to have no "memory/cpu leak" anywhere
+  *
+  * @param actorRef actorRef of the initiator of the order. This is extremely useful if an actor needs to talk with
+  *                 its parent. This is also used to easily remove the WorkerTypeOrders instantiated by the
+  *                 dying actor, and kill the remaining actors (that way, we are more "stateless" and it eases the development
+  *                 a lot).
   * @param workerTypeId
   * @param loadBalancerType The load balancer in charge of handling the number of actors we want to be started. If
   *                         two different orders are sent with the same id, only the first received will be used.
@@ -242,7 +249,9 @@ abstract class WorkerActorTopology(actorRef: ActorRef) extends ClusterRemoteMess
   }
 
   /**
-    * Return true if a workerActor has been removed or not
+    * Return true if a workerActor has been removed or not. If the WorkerActor was found, we also remove every
+    * WorkerOrder initiated by it, and kill the related actor (which will automatically trigger the same thing
+    * for the children)
     * @param actorRef
     * @return
     */
