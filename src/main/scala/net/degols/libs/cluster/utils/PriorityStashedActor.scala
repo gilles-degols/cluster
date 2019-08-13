@@ -11,24 +11,14 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Priority between [0;10[ is reserved for the PriorityStashedActor. Other messages should extend PriorityStashedMessage
   * @param priority
   */
 @SerialVersionUID(0L)
-abstract class PriorityStashedMessage(val priority: Int) {
-
-  /**
-    * We cannot rely on the default hashcode alone as we could have conflict. So we generate another object for each instance
-    * @return
-    */
-  val oid: String = new ObjectId().toHexString
-}
-
-@SerialVersionUID(0L)
-case class GarbageCollector() extends PriorityStashedMessage(5)
+abstract class PriorityStashedMessage(val priority: Int)
 
 @SerialVersionUID(0L)
 case class FinishedProcessing(message: Any) extends PriorityStashedMessage(5)
@@ -86,7 +76,7 @@ abstract class PriorityStashedActor extends Actor{
   private val actorStatistics: ActorStatistics = new ActorStatistics(self)
 
   /**
-    * This id is only used to improve the debugging
+    * This id is only used to improve the traceging
     */
   protected var _id: String = "PriorityStashedActor"
   protected def id: String = _id
@@ -95,86 +85,52 @@ abstract class PriorityStashedActor extends Actor{
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   protected val customStash: mutable.HashMap[Int, ListBuffer[StashedElement]] = new mutable.HashMap[Int, ListBuffer[StashedElement]]()
-  protected val runningMessages: mutable.HashMap[String, StashedElement] = new mutable.HashMap[String, StashedElement]()
+
+  /**
+    * Key used is the message in itself. This is better than just using the hashCode() as the hashCode() could have
+    * changed between the first reception of the message, and its processing. Obviously, this is not a good practice,
+    * but at least we avoid strange behaviors with the PriorityStashedActor
+   */
+  protected val runningMessages: mutable.HashMap[Any, StashedElement] = new mutable.HashMap[Any, StashedElement]()
 
   protected val maximumRunningMessages: Int = 1
 
   /**
-    * If the developer made some mistakes, we might have the actor stucked. If we did not receive a FinishedProcessing message
-    * after maximumTimeProcessingMs, we assume a message was not correctly handled, so we remove it from the runningMessages.
-    * This is only useful if the actor executes a future obviously.
-    *
-    * The garbage collector only works if there are waiting messages. Put 0L if you wish to deactivate it.
+    * Wrapper around developer's code. Catch unexpected errors and avoid the PriorityStashed to be "stuck" because
+    * of that
+    * @param receive
+    * @param message
     */
-  private var _maximumTimeProcessingMs: Long = 5 * 60 * 1000L
-  private var _maximumTimeProcessingScheduler: Cancellable = _
-  protected def maximumTimeProcessingMs: Long = _maximumTimeProcessingMs
-  protected def setMaximumTimeProcessingMs(value: Long): Unit = {
-    _maximumTimeProcessingMs = value
-    if(_maximumTimeProcessingScheduler != null) {
-      // Cancel the previous value
-      _maximumTimeProcessingScheduler.cancel()
-    }
-
-    if(_maximumTimeProcessingMs > 0) {
-      _maximumTimeProcessingScheduler = context.system.scheduler.schedule(_maximumTimeProcessingMs millis, _maximumTimeProcessingMs millis, self, GarbageCollector())
-    } else {
-      logger.info(s"$id: GarbageCollector is deactivated.")
-    }
-  }
-
-  /**
-    * As we can execute a message later on, but we still want to have a valid sender(), we need to manually override
-    * the sender method. Using tell with a sender can lead to concurrency problems as we need to send the message to ourselves
-    */
-
-  /**
-    * Initialize the garbage collector
-    */
-  setMaximumTimeProcessingMs(_maximumTimeProcessingMs)
-
-  /**
-    * Return the uid for a message. Might be composed of hashcode + unique id
-    */
-  private def uid(message: Any): String = {
-    message match {
-      case x: PriorityStashedMessage => s"${message.hashCode()}-${x.oid}"
-      case x => s"${message.hashCode()}"
+  private def callAroundReceive(receive: Receive, message: Any): Unit = {
+    Try{
+      super.aroundReceive(receive, message)
+    } match {
+      case Success(r) => r
+      case Failure(e) =>
+        logger.error(s"$id: Uncaught error in the actor, this must never happen as the PriorityStashedActor could have been stuck!", e)
+        endProcessing(message)
     }
   }
 
   override def aroundReceive(receive: Receive, message: Any): Unit = {
     message match {
-      case x: GarbageCollector =>
-        val messagesToRemove = runningMessages.filter(messageWrapper => {
-          messageWrapper._2.creationTime < new DateTime().getMillis - _maximumTimeProcessingMs
-        }).toList
-
-        // We only remove running messages if there are waiting messages
-        if(messagesToRemove.nonEmpty && customStash.values.map(_.size).sum > 0) {
-          logger.error(s"$id: GarbageCollector must remove ${messagesToRemove.size} old messages. Please investigate or increase maximumTimeProcessingMs (value is ${maximumTimeProcessingMs} ms). Existing messages: ${runningMessages.values.size}")
-          messagesToRemove.foreach(messageWrapper => {
-           runningMessages.remove(messageWrapper._1)
-          })
-        }
-
-      case x: GetActorStatistics =>
+      case _: GetActorStatistics =>
         sender() ! actorStatistics
 
       case x: ExecuteElementNow =>
-        super.aroundReceive(receive, x.message)
+        callAroundReceive(receive, x.message)
 
       case xWrapper: FinishedProcessing =>
-        logger.debug(s"$id: Received FinishedProcessing message.")
+        logger.trace(s"$id: Received FinishedProcessing message for ${xWrapper.message}.")
 
         // Remove the message from the processing
-        runningMessages.get(uid(xWrapper.message)) match {
+        runningMessages.get(xWrapper.message) match {
           case Some(previousMessage) =>
             val diff = new DateTime().getMillis - previousMessage.creationTime
             actorStatistics.addProcessedMessage(diff)
-            runningMessages.remove(uid(xWrapper.message))
+            runningMessages.remove(xWrapper.message)
           case None =>
-            logger.error(s"$id: Tried to remove message but we did not find it in the running messages: ${runningMessages.keys}.")
+            logger.error(s"$id: Tried to remove message ${xWrapper.message} but we did not find it in the running messages: ${runningMessages.map(_.toString()).mkString(", ")}.")
         }
 
         // Check if we should process the next message, but according to their priority
@@ -183,31 +139,31 @@ abstract class PriorityStashedActor extends Actor{
 
         remainingStash match {
           case Some(stash) =>
-            val message = stash.remove(0)
-            logger.debug(s"$id: Remaining stash size to execute after removal: ${stash.size}. Total is ${customStash.map(_._2.size).sum}")
+            val initialStashedElement: StashedElement = stash.remove(0)
+            logger.trace(s"$id: Remaining stash size to execute after removal: ${stash.size}. Total is ${customStash.map(_._2.size).sum}")
 
             // We create a new object as the time has changed. For performance purpose we could re-use the same object in the future
-            val stashedElement = StashedElement(message.message, message.sender, new DateTime().getMillis)
-            runningMessages.put(uid(message.message), stashedElement)
+            val stashedElement = StashedElement(initialStashedElement.message, initialStashedElement.sender, new DateTime().getMillis)
+            runningMessages.put(initialStashedElement.message, stashedElement)
 
             // We cannot directly call aroundReceive here as the sender is invalid. We could override the sender(), but this
             // is not the best solution as context.sender() would still contain the old value
-            self.tell(ExecuteElementNow(message.message), message.sender)
+            self.tell(ExecuteElementNow(initialStashedElement.message), initialStashedElement.sender)
           case None =>
-            logger.debug(s"$id: Empty stash, nothing more to process")
+            logger.trace(s"$id: Empty stash, nothing more to process")
         }
 
       case x =>
         // Only send the order if there are less than x futures running at the same time
         val stashedElement = StashedElement(message, sender(), new DateTime().getMillis)
         if(runningMessages.size < maximumRunningMessages) {
-          logger.debug(s"$id: Directly process message ${uid(x)} from ${sender()} to ${self}")
-          runningMessages.put(uid(message), stashedElement)
+          logger.trace(s"$id: Directly process message ${x} from ${sender()} to ${self}")
+          runningMessages.put(message, stashedElement)
 
           // We directly received the message, no need to re-send an intermediate message, we can execute it directly with the correct sender() information
-          super.aroundReceive(receive, message)
+          callAroundReceive(receive, message)
         } else {
-          logger.debug(s"$id: Waiting to process message ${uid(message)} from ${sender()} to ${self} as we have ${runningMessages.size} running messages.")
+          logger.trace(s"$id: Waiting to process message ${message} from ${sender()} to ${self} as we have ${runningMessages.size} running messages.")
           val priority = message match {
             case fsMessage: PriorityStashedMessage => fsMessage.priority
             case otherMessage => Int.MaxValue
@@ -240,12 +196,12 @@ abstract class PriorityStashedActor extends Actor{
         case Failure(exception) => Success("Failure")
       }.map(res => {
         val currentDate = new DateTime()
-        logger.debug(s"$id: Finish processing of ${message.hashCode()} at $currentDate")
+        logger.trace(s"$id: Finish processing (future) of ${message.hashCode()} at $currentDate")
         self ! FinishedProcessing(message)
       })
     } else {
       val currentDate = new DateTime()
-      logger.debug(s"$id: Finish processing of ${message.hashCode()} at $currentDate")
+      logger.trace(s"$id: Finish processing (direct) of ${message.hashCode()} at $currentDate")
       self ! FinishedProcessing(message)
     }
   }
