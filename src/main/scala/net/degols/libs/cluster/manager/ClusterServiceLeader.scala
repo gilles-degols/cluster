@@ -143,7 +143,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
     workerInfo.balancerType
       .map(balancer => {
         val fullName = Communication.fullActorName(componentName, packageName, workerInfo.shortName)
-        WorkerOrder(fullName, balancer)
+        WorkerOrder(fullName, balancer, workerInfo.metadata)
       })
   }
 
@@ -161,7 +161,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
           val workerInfo = rawInfo._2
 
           // First send the workerTypeInfo
-          val workerTypeInfo = convertWorkerInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
+          val workerTypeInfo: WorkerTypeInfo = convertWorkerInfo(componentLeader.componentName, packageLeader.packageName, workerInfo)
           workerTypeInfo.nodeInfo = nodeInfo.get
           implicit val timeout: Timeout = 10 seconds
 
@@ -256,10 +256,10 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
             m.nodeInfo = nodeInfo.get
 
             for {
-              resultStarted <- communication.sendInfoToManager(m, Option(message.actorRef))
-              resultHealth <- communication.sendInfoToManager(m, Option(message.actorRef))
+              _ <- communication.sendInfoToManager(m, Option(message.actorRef))
+              _ <- communication.sendInfoToManager(workerActorHealth, Option(message.actorRef))
             } yield {
-              resultStarted
+              Unit
             }
 
           case Failure(e) =>
