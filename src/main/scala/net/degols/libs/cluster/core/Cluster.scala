@@ -128,7 +128,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
         val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.workerTypeOrder.id, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
         worker.setStatus(ClusterElementRunning())
       case None =>
-        error("We got a StartedWorkerActor which was already removed from the local topology. TODO: We should solve this bug")
+        error(s"We got a StartedWorkerActor ${startedWorkerActor.runningActorRef} which was already removed from the local topology. TODO: We should solve this bug")
     }
   }
 

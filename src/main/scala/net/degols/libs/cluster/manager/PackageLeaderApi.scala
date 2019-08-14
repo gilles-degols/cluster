@@ -59,7 +59,7 @@ trait PackageLeaderApi extends Logging{
     * @return
     */
   def startWorker(work: StartWorkerWrapper): ActorRef = {
-    debug(s"Try to start the worker for the package $packageName and shortName: ${work.shortName}")
+    debug(s"Try to start the worker for the package $packageName & shortName ${work.shortName}, orderId is ${work.initialMessage.workerTypeOrder.id}.")
     workers.find(_._1.shortName == work.shortName) match {
       case Some(res) =>
         res._2(work)
