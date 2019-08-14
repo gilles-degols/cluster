@@ -17,7 +17,6 @@ import scala.util.{Failure, Success, Try}
   * @param id
   */
 class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterElement{
-  private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   /**
     * All pipeline steps of the running system
@@ -43,7 +42,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
     */
   def startWorker(context: ActorContext, workerType: WorkerType, workerTypeOrder: WorkerTypeOrder): Unit = {
     workerTypes.find(_ == workerType) match {
-      case None => logger.error(s"No WorkerType $workerType found in $this. Not possible to start worker.")
+      case None => error(s"No WorkerType $workerType found in $this. Not possible to start worker.")
       case Some(w) =>
         val workerId = Worker.generateWorkerId(workerType.workerTypeInfo)
         Try {
@@ -55,7 +54,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
             worker.setStatus(ClusterElementStarting())
             w.addWorker(worker)
           case Failure(err) =>
-            logger.warn(s"Impossible to send a StartWorkerActor to $this for WorkerType: ${workerType}", err)
+            warn(s"Impossible to send a StartWorkerActor to $this for WorkerType: ${workerType}", err)
         }
     }
   }

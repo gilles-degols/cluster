@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory
 import akka.pattern.ask
 import com.github.benmanes.caffeine.cache.Caffeine
 import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
+import net.degols.libs.cluster.utils.Logging
 import play.api.libs.json.{JsObject, Json}
 import scalacache.caffeine.CaffeineCache
 import scalacache._
@@ -34,8 +35,8 @@ case class StartWorkerWrapper(shortName: String, actorName: String, infoMetadata
   * Contain tools to communicate with the Manager of the cluster. Typically useful to send WorkerOrders
   */
 @Singleton
-class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurationApi) {
-  private val logger = LoggerFactory.getLogger(getClass)
+class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurationApi) extends Logging {
+
   implicit val ec: ExecutionContext = clusterConfigurationApi.executionContext
 
   /**
@@ -88,7 +89,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
     cache.map(c => c.get(key).transform({
       case Success(r) => Success(r)
       case Failure(e) =>
-        logger.error("Impossible to fetch ClusterInfo data from the cache", e)
+        error("Impossible to fetch ClusterInfo data from the cache", e)
         Success(None)
     }).flatMap {
       case Some(r) => Future{Option(r)}
@@ -115,14 +116,14 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
               c.put(key)(result)  // Update the cache
               Option(result)
             })
-          case Failure(error) =>
-            logger.error(s"Failure while fetching $clusterInfo from Manager.", error)
+          case Failure(e) =>
+            error(s"Failure while fetching $clusterInfo from Manager.", e)
             Future.successful{
               None
             }
         }
       case None =>
-        logger.error(s"Manager not available to fetch $clusterInfo from it.")
+        error(s"Manager not available to fetch $clusterInfo from it.")
         Future{None}
     }
   }
@@ -153,7 +154,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
   private[manager] def notifyWorkerTypeInfo(componentLeader: ComponentLeader)(implicit context: ActorContext): Future[Seq[Any]] = {
     manager match {
       case Some(currentManager) =>
-        logger.debug(s"Send all workerTypeInfo to the manager $currentManager")
+        debug(s"Send all workerTypeInfo to the manager $currentManager")
         val packageAndWorkers = componentLeader.packageLeaders.flatMap(packageLeader => packageLeader.workerInfos.map(workerInfo => (packageLeader, workerInfo)))
 
         val allMessages = ClusterTools.foldFutures(packageAndWorkers.toIterator, (rawInfo: (PackageLeaderApi, WorkerInfo)) => {
@@ -172,14 +173,14 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
                   case Some(order) =>
                     communication.sendWorkerOrder(order)
                   case None =>
-                    logger.debug(s"No WorkerOrder given for $workerTypeInfo, it must be sent manually afterwards in that case!")
+                    debug(s"No WorkerOrder given for $workerTypeInfo, it must be sent manually afterwards in that case!")
                     Future{Unit}
                 }
               })
 
           sendInfo.andThen {
             case Failure(e) =>
-              logger.error(s"Failure while sending the $workerTypeInfo to the manager", e)
+              error(s"Failure while sending the $workerTypeInfo to the manager", e)
           }
 
           sendInfo
@@ -188,7 +189,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
         // Make the future fails if there was one failure
         allMessages.map(_.map(_.get))
       case None => // Nothing to do
-        logger.error("Not possible to notify the Manager about our WorkerInfo as none is found...")
+        error("Not possible to notify the Manager about our WorkerInfo as none is found...")
         Future{throw new MissingManager("Manager not yet available")}
     }
   }
@@ -204,12 +205,12 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
         case message: StartWorkerActor =>
           handleStartWorker(componentLeader, message)
         case x =>
-          logger.error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")
+          error(s"Unknown ClusterRemoteMessage received $x, this should never happen!")
           Future{Unit}
       }
     }.flatten.andThen{
       case Failure(e) =>
-        logger.error(s"Impossible to handle the message $clusterRemoteMessage received from the manager", e)
+        error(s"Impossible to handle the message $clusterRemoteMessage received from the manager", e)
     }
   }
 
@@ -219,7 +220,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
     */
   private def handleStartWorker(componentLeader: ComponentLeader, message: StartWorkerActor)(implicit context: ActorContext): Future[Unit.type] = {
     // The worker name is not mandatory, it's just to avoid having the developer deals with it if it does not need to
-    logger.info(s"Starting worker type id: ${message.workerTypeInfo.workerTypeId}")
+    info(s"Starting worker type id: ${message.workerTypeInfo.workerTypeId}")
 
     // Find the related packageLeader who can start the worker
     val packageInCharge: Option[PackageLeaderApi] = componentLeader.packageLeaders.find(packageLeader => {
@@ -233,7 +234,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
       case Some(p) =>
         startWorker(p, message)
       case None =>
-        logger.error(s"No PackageLeader available to start the workerTypeId ${message.workerTypeInfo.workerTypeId}")
+        error(s"No PackageLeader available to start the workerTypeId ${message.workerTypeInfo.workerTypeId}")
         Future{throw new MissingPackageLeader(s"No packageLeader available to start ${message.workerTypeInfo.workerTypeId}, this should never happen. Probably an internal error to the library.")}
     }
   }
@@ -263,7 +264,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
             }
 
           case Failure(e) =>
-            logger.error(s"Impossible to set a watcher, the actor probably died mid-way: $e")
+            error(s"Impossible to set a watcher, the actor probably died mid-way: $e")
             val m = FailedWorkerActor(context.self, message, new Exception("Failing actor after starting it"))
             m.nodeInfo = nodeInfo.get
 
@@ -274,7 +275,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
           case exception: Exception => exception
           case _ => new Exception(s"Unknown error while starting a workerActor: $err")
         }
-        logger.error(s"Got an exception while trying to start a worker $initialName: ${ClusterTools.formatStacktrace(excep)}")
+        error(s"Got an exception while trying to start a worker $initialName: ${ClusterTools.formatStacktrace(excep)}")
         val m = FailedWorkerActor(context.self, message, excep)
         m.nodeInfo = nodeInfo.get
 

@@ -18,7 +18,7 @@ import scala.util.Try
   */
 @Singleton
 class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends ClusterConfigurationApi {
-  private val logger = LoggerFactory.getLogger(getClass)
+
 
   /**
     * If the library is loaded directly as a subproject, the Config of the subproject overrides the configuration of the main

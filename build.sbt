@@ -30,7 +30,7 @@ libraryDependencies += "commons-io" % "commons-io" % "2.4"
 val electionLibraryVersion = "1.0.0"
 val electionPath = "../election"
 lazy val electionLibrary: RootProject = RootProject(file(electionPath))
-val useLocalElectionLibrary = true
+val useLocalElectionLibrary = false
 val localElectionAvailable = scala.reflect.io.File(scala.reflect.io.Path(electionPath)).exists
 lazy val cluster = if(localElectionAvailable && useLocalElectionLibrary) {
   (project in file(".")).dependsOn(electionLibrary)
@@ -63,5 +63,5 @@ libraryDependencies += "com.github.cb372" %% "scalacache-caffeine" % "0.27.0"
 // publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
 publishTo := Some("gd-maven" at s"http://localhost:8081/repository/maven-gd")
 isSnapshot := false
-credentials += Credentials("Sonatype Nexus Repository Manager", "localhost", "admin", "admin123")
-resolvers += "gd-maven" at "http://localhost:8081/repository/maven-gd/"
+//credentials += Credentials("Sonatype Nexus Repository Manager", "localhost", "admin", "admin123")
+//resolvers += "gd-maven" at "http://localhost:8081/repository/maven-gd/"

@@ -1,11 +1,13 @@
 package net.degols.libs.cluster.core
 
+import net.degols.libs.cluster.utils.Logging
+
 
 /**
   * Not all objects of the Cluster need to extends this class, only those who could be enhanced with it. Typically
   * the classes directly monitored through Akka (WorkerLeader and Worker)
   */
-trait ClusterElement{
+trait ClusterElement extends Logging{
   private var _statusHistory: Seq[ClusterElementStatus] = List(ClusterElementUnknown())
 
   def isUp: Boolean = !isDown

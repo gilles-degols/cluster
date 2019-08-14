@@ -6,6 +6,7 @@ import net.degols.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
 import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import net.degols.libs.cluster.core.{Cluster, ClusterManagement}
 import net.degols.libs.cluster.messages._
+import net.degols.libs.cluster.utils.Logging
 import net.degols.libs.election._
 import org.slf4j.LoggerFactory
 
@@ -26,8 +27,8 @@ final class Manager(electionService: ElectionService,
                               configurationService: ConfigurationService,
                               clusterConfiguration: ClusterConfiguration,
                               cluster: Cluster)
-                    extends ElectionWrapper(electionService, configurationService){
-  private val logger = LoggerFactory.getLogger(getClass)
+                    extends ElectionWrapper(electionService, configurationService) with Logging{
+
   private var _previousLeader: Option[ActorRef] = None
   private var _previousLeaderWrapper: Option[ActorRef] = None
   private var _currentWorkerLeader: Option[ActorRef] = None
@@ -83,38 +84,38 @@ final class Manager(electionService: ElectionService,
 
     case message: DistributeWork =>
       if(isLeader) { // There is no reason to distribute work if we are not leader
-        logger.debug(s"[Manager] Distribute workers (soft: $message)")
+        debug(s"[Manager] Distribute workers (soft: $message)")
         clusterManagement.distributeWorkers(loadBalancers, message.soft)
       }
 
     case message: CleanOldWorkers =>
       if(isLeader){
-        logger.debug("[Manager] Clean old workers")
+        debug("[Manager] Clean old workers")
         clusterManagement.cleanOldWorkers()
       }
 
     case message: ClusterRemoteMessage =>
-      logger.debug(s"[Manager] Received a ClusterRemoteMessage: $message")
+      debug(s"[Manager] Received a ClusterRemoteMessage: $message")
       if(isLeader) {
         handleClusterMessage(message)
       }
 
     case message: Terminated =>
-      logger.warn(s"[Manager] Received a Terminated message from ${message.actor}")
+      warn(s"[Manager] Received a Terminated message from ${message.actor}")
       clusterManagement.removeWatchedActor(message.actor)
 
     case message =>
-      logger.warn(s"[Manager] Received unknown message: $message")
+      warn(s"[Manager] Received unknown message: $message")
   }
 
   def checkChangedLeader(): Unit = {
     if(_previousLeader != currentLeader) {
-      logger.warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader, the wrapper changed from ${_previousLeaderWrapper} to $currentLeaderWrapper")
+      warn(s"[Manager] The Manager in charge has just changed from ${_previousLeader} to $currentLeader, the wrapper changed from ${_previousLeaderWrapper} to $currentLeaderWrapper")
       _previousLeader = currentLeader
       _previousLeaderWrapper = currentLeaderWrapper
       _currentWorkerLeader match {
         case Some(workerLeader) => workerLeader ! TheLeaderIs(currentLeader, currentLeaderWrapper)
-        case None => logger.warn("[Manager] The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
+        case None => warn("[Manager] The WorkerLeader is not yet started, it will be warned once it contacts the Manager")
       }
 
       if(isLeader) {
@@ -128,49 +129,49 @@ final class Manager(electionService: ElectionService,
   def handleClusterMessage(rawMessage: ClusterRemoteMessage): Unit = {
     rawMessage match {
       case message: WorkerTypeInfo =>
-        logger.debug(s"Register WorkerTypeInfo: $message")
+        debug(s"Register WorkerTypeInfo: $message, metadata is ${message.metadata}")
         clusterManagement.registerWorkerTypeInfo(message)
         sender() ! MessageWasHandled(context.self,message)
       case message: WorkerTypeOrder =>
-        logger.debug(s"Register WorkerTypeOrder: $message")
+        debug(s"Register WorkerTypeOrder: $message, metadata is ${message.metadata}")
         clusterManagement.registerWorkerTypeOrder(message)
         sender() ! MessageWasHandled(context.self,message)
       case message: WorkerActorHealth =>
-        logger.debug(s"Register WorkerActorHealth: $message")
+        debug(s"Register WorkerActorHealth: $message")
         clusterManagement.updateWorkerActorHealth(message)
         sender() ! MessageWasHandled(context.self,message)
       case message: StartedWorkerActor =>
-        logger.debug(s"Register StartedWorkerActor: $message")
+        debug(s"Register StartedWorkerActor: $message, metadata is ${message.startWorkerActor.workerTypeOrder.metadata}")
         clusterManagement.registerStartedWorkerActor(message)
         sender() ! MessageWasHandled(context.self,message)
       case message: FailedWorkerActor =>
-        logger.debug(s"Register FailedWorkerActor: $message")
+        debug(s"Register FailedWorkerActor: $message")
         clusterManagement.registerFailedWorkerActor(message)
         sender() ! MessageWasHandled(context.self,message)
       case message: GetInfoFromActorRef =>
-        logger.debug(s"Worker ${sender()} is asking some information about the actorRef ${message.targetActorRef}")
+        debug(s"Worker ${sender()} is asking some information about the actorRef ${message.targetActorRef}")
         sender() ! clusterManagement.infoFromActorRef(message.targetActorRef)
       case message: GetActorRefsFor =>
-        logger.debug(s"Worker ${sender()} is asking for the ActorRefs of workerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
+        debug(s"Worker ${sender()} is asking for the ActorRefs of workerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
         Try {
           val actorRefs = clusterManagement.actorRefsFor(message.workerTypeId, message.orderId, message.isRunning)
           sender() ! actorRefs
         } match {
           case Success(res) => // Nothing to do
-          case Failure(err) => logger.error(s"Impossible to reply to ${sender()} about the actorRefs for the WorkerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
+          case Failure(err) => error(s"Impossible to reply to ${sender()} about the actorRefs for the WorkerTypeId: ${message.workerTypeId} and orderId: ${message.orderId}")
         }
       case message: GetAllWorkerTypeIds =>
-        logger.debug(s"Worker ${sender()} is asking for the existing workerTypeIds in the system.")
+        debug(s"Worker ${sender()} is asking for the existing workerTypeIds in the system.")
         Try {
           val workerTypeIds = clusterManagement.existingWorkerTypeIds()
           sender() ! workerTypeIds
         } match {
           case Success(res) => // Nothing to do
-          case Failure(err) => logger.error(s"Impossible to reply to ${sender()} about the existing WorkerTypeIds")
+          case Failure(err) => error(s"Impossible to reply to ${sender()} about the existing WorkerTypeIds")
         }
 
       case other =>
-        logger.error(s"Received unknown ClusterRemoteMessage: $rawMessage")
+        error(s"Received unknown ClusterRemoteMessage: $rawMessage")
     }
   }
 

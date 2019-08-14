@@ -8,6 +8,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
 import net.degols.libs.cluster.messages.{ClusterRemoteMessage, GetActorRefsFor, GetAllWorkerTypeIds, GetInfoFromActorRef, InfoFromActorRef, MessageWasHandled, MissingActor, UnrespondingManager, WorkerActorHealth, WorkerTypeOrder}
+import net.degols.libs.cluster.utils.Logging
 
 import scala.concurrent.duration._
 
@@ -16,8 +17,8 @@ case class RemoteReply(content: Any)
 /**
   * Everything related to the communication between various workers
   */
-class Communication(service: ClusterServiceLeader) {
-  private val logger = LoggerFactory.getLogger(getClass)
+class Communication(service: ClusterServiceLeader) extends Logging {
+
 
   /**
     * Return information about an actorRef. Typically useful to find our own orderId
@@ -32,7 +33,7 @@ class Communication(service: ClusterServiceLeader) {
         case Success(r) =>
           Success(r)
         case Failure(e) =>
-          logger.error("Problem while fetching data from the manager", e)
+          error("Problem while fetching data from the manager", e)
           Success(None)
       }.map(res => {
       res.flatMap(_.asInstanceOf[Option[InfoFromActorRef]])
@@ -52,7 +53,7 @@ class Communication(service: ClusterServiceLeader) {
         case Success(r) =>
           Success(r)
         case Failure(e) =>
-          logger.error("Problem while fetching data from the manager", e)
+          error("Problem while fetching data from the manager", e)
           Success(None)
       }.map(res => {
       res.map(_.asInstanceOf[List[ActorRef]]).getOrElse(List.empty[ActorRef])
@@ -74,7 +75,7 @@ class Communication(service: ClusterServiceLeader) {
         case Success(r) =>
           Success(r)
         case Failure(e) =>
-          logger.error("Problem while fetching data from the manager", e)
+          error("Problem while fetching data from the manager", e)
           Success(None)
       }.map(res => {
       res.map(_.asInstanceOf[List[String]]).getOrElse(List.empty[String])
@@ -92,7 +93,7 @@ class Communication(service: ClusterServiceLeader) {
           throw new Exception(s"Invalid custom orderId '$id' for a WorkerOrder ${workerOrder.fullName}, it MUST always contain the fullName to avoid " +
             "clashes.")
         }
-        logger.debug(s"The developer specified himself/herself a specific id '$id' for a WorkerOrder: ${workerOrder.fullName}, be careful.")
+        debug(s"The developer specified himself/herself a specific id '$id' for a WorkerOrder: ${workerOrder.fullName}, be careful.")
         id
       case None =>
         // The orderId must remain the same across the different JVM, so it should not be customized with node information
@@ -122,14 +123,14 @@ class Communication(service: ClusterServiceLeader) {
     else service.manager
     manager match {
       case Some(actorRef) =>
-        logger.debug(s"Sending message $message to Manager")
+        debug(s"Sending message $message to Manager")
         implicit val timeout: Timeout = Timeout(10 seconds)
 
         (actorRef ? message).map(result => {
           Unit // We always expect the MessageWasHandled, so as long as we have a successful future, that's all that matter
         })
       case None =>
-        logger.warn(s"There is no manager available for the moment to send the message $message!")
+        warn(s"There is no manager available for the moment to send the message $message!")
         Future{throw new UnrespondingManager("No manager available for the moment")}
     }
   }
@@ -144,7 +145,7 @@ class Communication(service: ClusterServiceLeader) {
         case Success(r) =>
           Success(r)
         case Failure(e) =>
-          logger.error("Problem while fetching data from the manager", e)
+          error("Problem while fetching data from the manager", e)
           Success(None)
       }.map(res => {
       res.map(_.asInstanceOf[List[ActorRef]]).getOrElse(List.empty[ActorRef])

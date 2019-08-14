@@ -4,6 +4,7 @@ import akka.actor.{ActorContext, ActorRef}
 import com.google.inject.Inject
 import net.degols.libs.cluster.core.{Cluster, ClusterManagement, WorkerType}
 import net.degols.libs.cluster.messages.{ClusterTopology, LoadBalancerType, StartedWorkerActor, WorkerTypeInfo, WorkerTypeOrder}
+import net.degols.libs.cluster.utils.Logging
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -13,8 +14,8 @@ import scala.concurrent.{ExecutionContext, Future}
   * To ease the extension of this class, some attributes are not automatically asked at creation. They are only set up
   * by the Manager.
   */
-abstract class LoadBalancer {
-  private val logger = LoggerFactory.getLogger(getClass)
+abstract class LoadBalancer extends Logging {
+
 
   // Set by the Manager
   var context: ActorContext = _

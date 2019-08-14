@@ -5,6 +5,7 @@ import akka.actor.{ActorContext, ActorRef, ActorSystem}
 import com.google.inject.Inject
 import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import net.degols.libs.cluster.messages._
+import net.degols.libs.cluster.utils.Logging
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Random, Success, Try}
@@ -21,8 +22,7 @@ case class WorkerTypeOrderWrapper(order: WorkerTypeOrder, actors: mutable.Set[Ac
 /**
   * General interface to access information about the cluster
   */
-class Cluster(clusterConfiguration: ClusterConfiguration) {
-  private val logger: Logger = LoggerFactory.getLogger(getClass)
+class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
   implicit val ec: ExecutionContext = clusterConfiguration.executionContext
 
   /**
@@ -84,7 +84,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
 
     watcherAttempt match {
       case Success(res) =>
-      case Failure(err) => logger.error(s"Impossible to watch a WorkerTypeInfo: $workerTypeInfo")
+      case Failure(err) => error(s"Impossible to watch a WorkerTypeInfo: $workerTypeInfo")
     }
 
     watcherAttempt
@@ -105,7 +105,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
 
     watcherAttempt match {
       case Success(res) =>
-      case Failure(err) => logger.error(s"Impossible to watch the sender of a WorkerTypeOrder: $workerTypeOrder")
+      case Failure(err) => error(s"Impossible to watch the sender of a WorkerTypeOrder: $workerTypeOrder")
     }
 
     watcherAttempt
@@ -116,7 +116,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
     * @param startedWorkerActor
     */
   def registerStartedWorkerActor(startedWorkerActor: StartedWorkerActor): Unit = {
-    logger.debug(s"Register StartedWorkerActor: $startedWorkerActor (jvm id: ${startedWorkerActor.jvmId}). System was: \n${this}")
+    debug(s"Register StartedWorkerActor: $startedWorkerActor (jvm id: ${startedWorkerActor.jvmId}). System was: \n${this}")
 
     // The WorkerActorHealth is received separately and it will be updated from time to time when we ask for an update
     // at each jvm. See updateWorkerActorHealth() which is called when we receive the appropriate message.
@@ -128,7 +128,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
         val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.workerTypeOrder.id, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
         worker.setStatus(ClusterElementRunning())
       case None =>
-        logger.error("We got a StartedWorkerActor which was already removed from the local topology. TODO: We should solve this bug")
+        error("We got a StartedWorkerActor which was already removed from the local topology. TODO: We should solve this bug")
     }
   }
 
@@ -160,7 +160,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
         work.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
         true
       case None =>
-        logger.debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
         false
     }
   }
@@ -176,7 +176,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
         .flatMap(_.workerTypes.filter(_.workerTypeInfo.workerTypeId == order.workerTypeId))
         .flatMap(_.workers.filter(_.orderId == order.id))
         .foreach(worker => {
-          logger.info(s"Asking the actor ${worker.actorRef} to kill itself as it belongs to WorkerTypeId ${order.workerTypeId} and we must all workers belonging to the orderId ${order.id}")
+          info(s"Asking the actor ${worker.actorRef} to kill itself as it belongs to WorkerTypeId ${order.workerTypeId} and we must all workers belonging to the orderId ${order.id}")
           worker.actorRef.foreach(actorRef => actorRef ! KillWorkerActor(context.self))
         })
   }
@@ -191,7 +191,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
     _orders.filter(_._2.actors.remove(actorRef))
       .filter(_._2.actors.isEmpty)
       .map(raw => {
-        logger.warn(s"There are no remaining initiators of the WorkerTypeOrder for WorkerTypeId ${raw._2.order.workerTypeId}, remove the order and ask for the killing of the related actors.")
+        warn(s"There are no remaining initiators of the WorkerTypeOrder for WorkerTypeId ${raw._2.order.workerTypeId}, remove the order and ask for the killing of the related actors.")
         killActorsForOrder(context, raw._2)
         _orders.remove(raw._1)
       })
@@ -211,7 +211,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
         workLeader.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
         true
       case None =>
-        logger.debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
         false
     }
   }
@@ -227,7 +227,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
 
     watcherAttempt match {
       case Success(res) =>
-      case Failure(err) => logger.error(s"Impossible to watch a WorkerActor: $startedWorkerActor")
+      case Failure(err) => error(s"Impossible to watch a WorkerActor: $startedWorkerActor")
     }
 
     watcherAttempt
@@ -244,7 +244,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
 
     watcherAttempt match {
       case Success(res) =>
-      case Failure(err) => logger.error(s"Impossible to unwatch the actorRef of a WorkerActor or WorkerLeader: $actorRef")
+      case Failure(err) => error(s"Impossible to unwatch the actorRef of a WorkerActor or WorkerLeader: $actorRef")
     }
 
     watcherAttempt
@@ -259,7 +259,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) {
       case Some(nodes) =>
         Random.shuffle(nodes.filter(_.workerManagers.nonEmpty)).headOption
       case None =>
-        logger.error(s"Normally this method should only be called if there are existing nodes available for a workerType $workerType")
+        error(s"Normally this method should only be called if there are existing nodes available for a workerType $workerType")
         None
     }
   }

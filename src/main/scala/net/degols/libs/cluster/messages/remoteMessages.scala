@@ -351,8 +351,6 @@ trait LoadBalancerType extends SimpleRemoteMessage
   * Load the appropriate LoadBalancer from a configuration
   */
 object LoadBalancerType {
-  private val logger: Logger = LoggerFactory.getLogger(getClass)
-
   def loadFromConfig(config: Config): LoadBalancerType = {
     val loadBalancer = getLoadBalancerType(config).getOrElse(BasicLoadBalancerType.CONFIGURATION_KEY)
 

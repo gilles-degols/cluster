@@ -38,13 +38,13 @@ object BasicLoadBalancerType{
   * We can have multiple load balancing working together, but only one will be used for a given WorkerType & WorkerOrder
   */
 class BasicLoadBalancer extends LoadBalancer {
-  private val logger = LoggerFactory.getLogger(getClass)
+
 
   override def isLoadBalancerType(loadBalancerType: LoadBalancerType): Boolean = loadBalancerType.isInstanceOf[BasicLoadBalancerType]
 
   override def hardWorkDistribution(workerType: WorkerType, workerTypeOrder: WorkerTypeOrder)(implicit ec: ExecutionContext): Future[Unit] = {
     Future{
-      logger.error("There is no hard work distribution in the BasicLoadBalancer.")
+      error("There is no hard work distribution in the BasicLoadBalancer.")
     }
   }
 
@@ -54,7 +54,7 @@ class BasicLoadBalancer extends LoadBalancer {
       val balancerType = workerTypeOrder.loadBalancerType.asInstanceOf[BasicLoadBalancerType]
 
       if(nodes.isEmpty) {
-        logger.error(s"The WorkerType $workerType has no nodes available, no work distribution possible.")
+        error(s"The WorkerType $workerType has no nodes available, no work distribution possible.")
         Future.successful{}
       } else {
         // Depending on the type of WorkType, we want to create a specific number of workers by JVM or per cluster
@@ -77,7 +77,7 @@ class BasicLoadBalancer extends LoadBalancer {
 
           var i = runningInstances.size
           if(i < wantedInstances) {
-            logger.info(s"Starting ${wantedInstances - i} instances of $workerType on $this")
+            info(s"Starting ${wantedInstances - i} instances of $workerType on $this")
           }
           while(i < wantedInstances) {
             workerManager.startWorker(context, workerType, workerTypeOrder)
@@ -95,14 +95,14 @@ class BasicLoadBalancer extends LoadBalancer {
         .map(workerManager => workerManager -> workerManager.workerTypes.filter(_ == workerType).flatMap(_.workers.filter(_.isUp).filter(_.orderId == workerTypeOrder.id))).toMap
       val runningInstances = managerAndRunningInstances.values.flatten.size
       if(managerAndRunningInstances.keys.isEmpty) {
-        logger.warn(s"There is no WorkerManager available for $workerType, not possible to start the missing ${wantedInstances - wantedInstances} instances.")
+        warn(s"There is no WorkerManager available for $workerType, not possible to start the missing ${wantedInstances - wantedInstances} instances.")
       } else if(runningInstances < wantedInstances) {
-        logger.info(s"Starting ${wantedInstances - runningInstances} instances of $workerType on various WorkerManagers.")
+        info(s"Starting ${wantedInstances - runningInstances} instances of $workerType on various WorkerManagers.")
         // We try to distribute the load between managers. For now we simply choose managers at random (but those having less than the average number of instances)
         val averageWantedInstances = (wantedInstances + 1f) / managerAndRunningInstances.keys.size
         val availableManagers = managerAndRunningInstances.toList.filter(_._2.size < averageWantedInstances)
         if(availableManagers.isEmpty) {
-          logger.error(s"No good WorkerManager found for $workerType...")
+          error(s"No good WorkerManager found for $workerType...")
         } else {
           var i = runningInstances
           while(i < wantedInstances) {

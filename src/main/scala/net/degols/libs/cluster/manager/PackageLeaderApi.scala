@@ -2,6 +2,7 @@ package net.degols.libs.cluster.manager
 
 import akka.actor.{ActorContext, ActorRef}
 import net.degols.libs.cluster.messages.UnknownWorker
+import net.degols.libs.cluster.utils.Logging
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -10,9 +11,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * Specify the different available W
   */
-trait PackageLeaderApi {
-  private val logger = LoggerFactory.getLogger(getClass)
-
+trait PackageLeaderApi extends Logging{
   /**
     * Package name
     * @return
@@ -60,7 +59,7 @@ trait PackageLeaderApi {
     * @return
     */
   def startWorker(work: StartWorkerWrapper): ActorRef = {
-    logger.debug(s"Try to start the worker for the package $packageName and shortName: ${work.shortName}")
+    debug(s"Try to start the worker for the package $packageName and shortName: ${work.shortName}")
     workers.find(_._1.shortName == work.shortName) match {
       case Some(res) =>
         res._2(work)

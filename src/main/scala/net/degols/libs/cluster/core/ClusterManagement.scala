@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory
 import scala.util.{Failure, Success, Try}
 import javax.inject.{Inject, Singleton}
 import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi}
+import net.degols.libs.cluster.utils.Logging
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -18,8 +19,8 @@ import scala.concurrent.{ExecutionContext, Future}
   * does not handle the load balancing in itself
   */
 @Singleton
-class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConfiguration: ClusterConfiguration) {
-  private val logger = LoggerFactory.getLogger(getClass)
+class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConfiguration: ClusterConfiguration) extends Logging {
+
   implicit val ec: ExecutionContext = clusterConfiguration.executionContext
 
   // If the manager is a follower, it will simply overrides this ClusterTopology based on what it receives from a leader
@@ -27,7 +28,7 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
   private var _clusterTopology: ClusterTopology = ClusterTopology(context.self)
 
   def setClusterTopology(clusterTopology: ClusterTopology): Unit = {
-    logger.warn("ClusterTopology is being set. Re-construct the hierarchy of JVMs to take over nicely.")
+    warn("ClusterTopology is being set. Re-construct the hierarchy of JVMs to take over nicely.")
     _clusterTopology = clusterTopology
     cluster.reconstructFromClusterTopology(clusterTopology)
   }
@@ -116,12 +117,12 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
           .map(order => (workerType, order))
 
         if(ordersForType.size >= 2) {
-          logger.info(s"We have ${ordersForType.size} different orders for ${workerType.workerTypeInfo.workerTypeId}")
+          info(s"We have ${ordersForType.size} different orders for ${workerType.workerTypeInfo.workerTypeId}")
         } else if (ordersForType.isEmpty) {
           // We cannot simply stop all related actors, as we also need to handle the lost of specific orders, in that
           // case we need to specifically target actors related to the lost orders. Because of that, we directly stop
           // the actors of a related workOrder as soon as we received the Terminated message
-          logger.warn(s"There is no remaining orders for ${workerType.workerTypeInfo.workerTypeId}, normally no related" +
+          warn(s"There is no remaining orders for ${workerType.workerTypeInfo.workerTypeId}, normally no related" +
             s" actors should exist anymore (to verify).")
         }
 
@@ -148,11 +149,11 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
               case Success(res) =>
                 Future.successful{}
               case Failure(err) =>
-                logger.error(s"Exception occurred while trying to distribute the work of $workerType", err)
+                error(s"Exception occurred while trying to distribute the work of $workerType", err)
                 Future.successful{} // Even if there we as a problem, we do not care
             }
           case None =>
-            logger.error(s"There is no loadBalancer accepting the type ${order.loadBalancerType}!")
+            error(s"There is no loadBalancer accepting the type ${order.loadBalancerType}!")
             Future.successful{}
         }
       }.flatten
