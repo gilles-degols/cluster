@@ -122,7 +122,7 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
           // We cannot simply stop all related actors, as we also need to handle the lost of specific orders, in that
           // case we need to specifically target actors related to the lost orders. Because of that, we directly stop
           // the actors of a related workOrder as soon as we received the Terminated message
-          warn(s"There is no order yet for ${workerType.workerTypeInfo.workerTypeId}, or it has disappeared (in this case, " +
+          info(s"There is no order yet for ${workerType.workerTypeInfo.workerTypeId}, or it has disappeared (in this case, " +
             s"the previously created actors should have died).")
         }
 
