@@ -131,7 +131,7 @@ class Communication(service: ClusterServiceLeader) extends Logging {
         })
       case None =>
         warn(s"There is no manager available for the moment to send the message $message!")
-        Future{throw new UnrespondingManager("No manager available for the moment")}
+        Future.failed{new UnrespondingManager("No manager available for the moment")}
     }
   }
 
@@ -161,7 +161,7 @@ class Communication(service: ClusterServiceLeader) extends Logging {
           val actorRef = Random.shuffle(actorRefs).head
           sendWithReply(actorRef, message)
         } else {
-          Future{throw new MissingActor(s"Not actor found for $workerTypeId")}
+          Future.failed{new MissingActor(s"Not actor found for $workerTypeId")}
         }
       })
   }
