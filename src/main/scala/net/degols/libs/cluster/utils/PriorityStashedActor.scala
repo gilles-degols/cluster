@@ -3,7 +3,6 @@ package net.degols.libs.cluster.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Cancellable}
 import akka.dispatch.{PriorityGenerator, UnboundedStablePriorityMailbox}
 import com.typesafe.config.Config
-import org.bson.types.ObjectId
 import org.joda.time.DateTime
 import org.slf4j.{Logger, LoggerFactory}
 

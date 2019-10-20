@@ -92,7 +92,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
         error("Impossible to fetch ClusterInfo data from the cache", e)
         Success(None)
     }).flatMap {
-      case Some(r) => Future{Option(r)}
+      case Some(r) => Future.successful{Option(r)}
       case None =>
         // Info not available in the cache, fetch it from Remote and automatically adds it to cache
         fetchFromManager(clusterInfo)
@@ -124,7 +124,7 @@ class ClusterServiceLeader @Inject()(clusterConfigurationApi: ClusterConfigurati
         }
       case None =>
         error(s"Manager not available to fetch $clusterInfo from it.")
-        Future{None}
+        Future.successful{None}
     }
   }
 

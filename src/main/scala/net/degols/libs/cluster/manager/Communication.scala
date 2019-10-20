@@ -9,6 +9,7 @@ import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
 import net.degols.libs.cluster.messages.{ClusterRemoteMessage, GetActorRefsFor, GetAllWorkerTypeIds, GetInfoFromActorRef, InfoFromActorRef, MessageWasHandled, MissingActor, UnrespondingManager, WorkerActorHealth, WorkerTypeOrder}
 import net.degols.libs.cluster.utils.Logging
+import org.joda.time.DateTime
 
 import scala.concurrent.duration._
 
@@ -154,14 +155,16 @@ class Communication(service: ClusterServiceLeader) extends Logging {
 
   def sendWithReply(workerTypeId: String, message: Any)(implicit timeout: Timeout, context: ActorContext): Future[RemoteReply] = {
     implicit val ac = context.dispatcher
+    val st = new DateTime().getMillis
     actorRefsForId(workerTypeId)
       .flatMap(actorRefs => {
+        error(s"GOT ACTORREF AFTER ${new DateTime().getMillis - st}ms")
         if(actorRefs.nonEmpty) {
           // Simply take one at random. If we want to do smarter load balancing, you need to handle it yourselves
           val actorRef = Random.shuffle(actorRefs).head
           sendWithReply(actorRef, message)
         } else {
-          Future.failed{new MissingActor(s"Not actor found for $workerTypeId")}
+          Future.failed{new MissingActor(s"No actor found for $workerTypeId")}
         }
       })
   }

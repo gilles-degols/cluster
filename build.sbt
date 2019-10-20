@@ -1,33 +1,30 @@
 name := "cluster"
 organization := "net.degols.libs"
-version := "1.0.0"
+version := "1.0.1"
 
 scalacOptions ++= Seq("-deprecation", "-feature", "-language:postfixOps")
 
-scalaVersion := "2.12.1"
+scalaVersion := "2.12.8"
 lazy val playVersion = "2.6.1"
 lazy val akkaVersion = "2.5.2"
+lazy val electionLibraryVersion = "1.0.0"
+
+libraryDependencies ++= Seq(
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion exclude("log4j", "log4j") exclude("org.slf4j","slf4j-log4j12"),
+  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+  "com.typesafe.akka" %% "akka-stream-kafka" % "0.19",
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion
+)
 
 libraryDependencies += "com.google.inject" % "guice" % "3.0"
 libraryDependencies += "com.typesafe.play" %% "play-json" % playVersion
-
-libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion exclude("log4j", "log4j") exclude("org.slf4j","slf4j-log4j12")
-)
-
-libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-  "com.typesafe.akka" %% "akka-stream-kafka" % "0.19"
-)
-
 libraryDependencies += "joda-time" % "joda-time" % "2.10"
-
+libraryDependencies += "com.github.cb372" %% "scalacache-core" % "0.27.0"
+libraryDependencies += "com.github.cb372" %% "scalacache-caffeine" % "0.27.0"
 libraryDependencies += "commons-io" % "commons-io" % "2.4"
 
 // Election library
-val electionLibraryVersion = "1.0.0"
 val electionPath = "../election"
 lazy val electionLibrary: RootProject = RootProject(file(electionPath))
 val useLocalElectionLibrary = false
@@ -45,23 +42,16 @@ lazy val electionDependency = if(localElectionAvailable && useLocalElectionLibra
 }
 libraryDependencies ++= electionDependency
 
-// Mongo Java Driver
-// https://mvnrepository.com/artifact/org.mongodb/mongo-java-driver
-libraryDependencies += "org.mongodb" % "mongo-java-driver" % "3.7.0"
 
-// Akka Remoting
-libraryDependencies += "com.typesafe.akka" %% "akka-remote" % akkaVersion
+// POM settings for Sonatype
+sonatypeProfileName := "net.degols"
+import xerial.sbt.Sonatype._
+sonatypeProjectHosting := Some(GitHubHosting("gilles-degols", "cluster", "gilles@degols.net"))
+licenses += ("MIT License", url("https://opensource.org/licenses/MIT"))
+publishMavenStyle := true
+publishTo := sonatypePublishToBundle.value
+usePgpKeyHex("C0FAC2FE")
 
-// https://mvnrepository.com/artifact/com.github.cb372/scalacache-core
-libraryDependencies += "com.github.cb372" %% "scalacache-core" % "0.27.0"
-// https://mvnrepository.com/artifact/com.github.cb372/scalacache-caffeine
-libraryDependencies += "com.github.cb372" %% "scalacache-caffeine" % "0.27.0"
-
-
-// Allow temporary overwrite
-// publishConfiguration := publishConfiguration.value.withOverwrite(true)
-// publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
-publishTo := Some("gd-maven" at s"http://localhost:8081/repository/maven-gd")
-isSnapshot := false
-//credentials += Credentials("Sonatype Nexus Repository Manager", "localhost", "admin", "admin123")
-//resolvers += "gd-maven" at "http://localhost:8081/repository/maven-gd/"
+lazy val username = Option(System.getenv("SONATYPE_USER")).getOrElse("sonatype_user")
+lazy val password = Option(System.getenv("SONATYPE_PASSWORD")).getOrElse("sonatype_password")
+credentials += Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)

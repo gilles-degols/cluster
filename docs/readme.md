@@ -14,16 +14,9 @@ We have the same requirements as for the [election library](https://github.com/g
 
 # Installation
 
-As of now, we did not yet publish the library in Maven Central, so you need to build and publish it to your local repository, as well as its dependency, the election library. For example, once you pulled both projects:
-
-`sbt +publishLocal`
-
-In the sbt project:
-
+The library is available on Maven Central, hence, you can easily import it:
 ```
-lazy val clusterLibraryVersion = "0.0.1"
-"net.degols" %% "cluster" % clusterLibraryVersion 
-	exclude("log4j", "log4j") exclude("org.slf4j","slf4j-log4j12")
+libraryDependencies += "net.degols.libs" % "cluster" % "1.0.1" exclude("log4j", "log4j") exclude("org.slf4j","slf4j-log4j12")
 ```
 
 Another alternative, useful for contributors, is to have the "election" & "cluster" packages in the same directory as your "cluster-example" project using it. Then, by following this [build.sbt ](https://github.com/gilles-degols/cluster-example/blob/master/build.sbt)used for a cluster-example project, you can automatically build the cluster library alongside the election library and the cluster-example project itself.
