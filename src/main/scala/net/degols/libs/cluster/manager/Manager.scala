@@ -24,11 +24,11 @@ import scala.util.{Failure, Success, Try}
   */
 @Singleton
 final class Manager(electionService: ElectionService,
-                              configurationService: ConfigurationService,
-                              clusterConfiguration: ClusterConfiguration,
-                              cluster: Cluster,
-                              actorSystem: ActorSystem)
-                    extends ElectionWrapper(electionService, configurationService, actorSystem) with Logging{
+                    electionConfiguration: ElectionConfigurationApi,
+                    clusterConfiguration: ClusterConfiguration,
+                    cluster: Cluster,
+                    actorSystem: ActorSystem)
+                    extends ElectionWrapper(electionService, electionConfiguration, actorSystem) with Logging{
 
   private var _previousLeader: Option[ActorRef] = None
   private var _previousLeaderWrapper: Option[ActorRef] = None

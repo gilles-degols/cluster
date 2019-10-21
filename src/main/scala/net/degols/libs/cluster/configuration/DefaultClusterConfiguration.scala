@@ -6,6 +6,7 @@ import com.google.inject.Inject
 import com.typesafe.config.{Config, ConfigFactory}
 import javax.inject.Singleton
 import net.degols.libs.cluster.ClusterTools
+import net.degols.libs.election.ConfigurationMerge
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
@@ -17,32 +18,7 @@ import scala.util.Try
   * Created by Gilles.Degols on 03-09-18.
   */
 @Singleton
-class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends ClusterConfigurationApi {
-
-
-  /**
-    * If the library is loaded directly as a subproject, the Config of the subproject overrides the configuration of the main
-    * project by default, and we want the opposite.
-    */
-  private lazy val projectConfig: Config = {
-    val projectFile = new File(pathToProjectFile)
-    ConfigFactory.load(ConfigFactory.parseFile(projectFile))
-  }
-
-  private val pathToProjectFile: String = {
-    Try{ConfigFactory.systemProperties().getString("config.resource")}.getOrElse("conf/application.conf")
-  }
-
-  private lazy val fallbackConfig: Config = {
-    val fileInSubproject = new File("../cluster/src/main/resources/application.conf")
-    val fileInProject = new File("main/resources/application.conf")
-    if (fileInSubproject.exists()) {
-      ConfigFactory.load(ConfigFactory.parseFile(fileInSubproject))
-    } else {
-      ConfigFactory.load(ConfigFactory.parseFile(fileInProject))
-    }
-  }
-  val config: Config = projectConfig.withFallback(defaultConfig).withFallback(fallbackConfig)
+class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends ClusterConfigurationApi with ConfigurationMerge {
 
   /**
     * Configuration for the cluster system. We merge multiple configuration files: One embedded, the other one from the project
@@ -122,16 +98,8 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
   /**
     * It's difficult to get a remote actor path locally. Because of that, we still want to know the current hostname + port
     */
-  override val akkaLocalHostname: Future[String] = {
-    Future{
-      config.getString("akka.remote.netty.tcp.hostname")
-    }
-  }
-  override val akkaLocalPort: Future[Int] = {
-    Future{
-      config.getInt("akka.remote.netty.tcp.port")
-    }
-  }
+  override val akkaLocalHostname: String = config.getString("akka.remote.netty.tcp.hostname")
+  override val akkaLocalPort: Int = config.getInt("akka.remote.netty.tcp.port")
 
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
@@ -140,4 +108,5 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
     config.getStringList(path).asScala.toList
   }
 
+  override val directoryName: String = "cluster"
 }

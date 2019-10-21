@@ -5,6 +5,7 @@ import java.io.File
 import com.google.inject.ImplementedBy
 import com.typesafe.config.{Config, ConfigFactory}
 import net.degols.libs.cluster.ClusterTools
+import net.degols.libs.election.ElectionConfigurationApi
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -12,7 +13,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 @ImplementedBy(classOf[DefaultClusterConfiguration])
-trait ClusterConfigurationApi {
+trait ClusterConfigurationApi{
   /**
     * General execution context to use in the system
     */
@@ -58,11 +59,9 @@ trait ClusterConfigurationApi {
     */
   val clusterInfoTimeout: Future[Int]
 
-  /**
-    * It's difficult to get a remote actor path locally. Because of that, we still want to know the current hostname + port
-    */
-  val akkaLocalHostname: Future[String]
-  val akkaLocalPort: Future[Int]
+
+  val akkaLocalHostname: String
+  val akkaLocalPort: Int
 }
 
 /**
@@ -97,8 +96,8 @@ object ClusterConfiguration {
       clusterInfoCacheSize <- clusterConfigurationApi.clusterInfoCacheSize
       clusterInfoCacheTimeout <- clusterConfigurationApi.clusterInfoCacheTimeout
       clusterInfoTimeout <- clusterConfigurationApi.clusterInfoTimeout
-      akkaLocalHostname <- clusterConfigurationApi.akkaLocalHostname
-      akkaLocalPort <- clusterConfigurationApi.akkaLocalPort
+      akkaLocalHostname <- Future{clusterConfigurationApi.akkaLocalHostname}
+      akkaLocalPort <- Future{clusterConfigurationApi.akkaLocalPort}
     } yield {
       ClusterConfiguration(
         clusterConfigurationApi.executionContext,

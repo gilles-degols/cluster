@@ -63,7 +63,7 @@ class ClusterLeaderActor @Inject()(
                                     clusterConfigurationApi: ClusterConfigurationApi, // The developer can override it
                                     service: ClusterServiceLeader,
                                     electionService: ElectionService,
-                                    configurationService: ConfigurationService,
+                                    electionConfigurationService: ElectionConfigurationApi,
                                     actorSystem: ActorSystem) extends PriorityStashedActor{
 
 
@@ -146,7 +146,7 @@ class ClusterLeaderActor @Inject()(
       case Success(r) =>
         debug("Loaded the default cluster configuration, packageLeaders and their workers. We try to start the local manager")
 
-        localManager = Option(context.actorOf(Props(new Manager(electionService, configurationService, r._1, _cluster.get, actorSystem)), name = "LocalManager"))
+        localManager = Option(context.actorOf(Props(new Manager(electionService, electionConfigurationService, r._1, _cluster.get, actorSystem)), name = "LocalManager"))
         localManager.get ! IAmTheWorkerLeader(r._3)
 
         Success(r)
