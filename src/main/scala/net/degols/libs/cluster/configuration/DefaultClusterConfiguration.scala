@@ -133,17 +133,6 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
     }
   }
 
-  override val akkaClusterRemoteHostname: Future[String] = {
-    Future{
-      config.getString("cluster.akka.remote.netty.tcp.hostname")
-    }
-  }
-  override val akkaClusterRemotePort: Future[Int] = {
-    Future{
-      config.getInt("cluster.akka.remote.netty.tcp.port")
-    }
-  }
-
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
     */

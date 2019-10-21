@@ -1,6 +1,8 @@
 package net.degols.libs.cluster.manager
 
 import net.degols.libs.cluster.balancing.LoadBalancer
+import net.degols.libs.cluster.utils.Logging
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -9,7 +11,7 @@ import scala.concurrent.Future
   * This Component contains general information about the available Component & their WorkerInfo. It is also
   * used to interact with the manager to send WorkerOrder
   */
-trait ComponentLeaderApi {
+trait ComponentLeaderApi extends Logging{
   /**
     * Component name. Must be unique accross all jvms.
     * We do not put a default value as after creating a second project, it might cause trouble if the developer forgot

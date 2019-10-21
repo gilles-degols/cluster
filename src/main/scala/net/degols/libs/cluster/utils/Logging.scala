@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory
 /**
   * Provide default logger to any class, and remove the overhead of calling debug often even if the log debug
   * is not activated.
-  * The small condition each time saves around 7µs. Worth it if we call the logger for every m. Behind the debug
+  * The small condition each time saves around 7µs. Worth it if we call the logger for every message. Behind the debug
   * itself, they also do the condition, but for whatever reason, it is not as efficient.
   *
   * For efficiency, we also have small methods to force the JIT inlining (default value is 35 bytes)

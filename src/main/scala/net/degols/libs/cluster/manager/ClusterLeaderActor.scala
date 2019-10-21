@@ -1,6 +1,6 @@
 package net.degols.libs.cluster.manager
 
-import akka.actor.{Actor, ActorRef, Cancellable, Kill, Props, Terminated}
+import akka.actor.{Actor, ActorRef, ActorSystem, Cancellable, Kill, Props, Terminated}
 import com.google.inject.{Inject, Singleton}
 import net.degols.libs.cluster.balancing.LoadBalancer
 import net.degols.libs.cluster.core.Cluster
@@ -63,7 +63,8 @@ class ClusterLeaderActor @Inject()(
                                     clusterConfigurationApi: ClusterConfigurationApi, // The developer can override it
                                     service: ClusterServiceLeader,
                                     electionService: ElectionService,
-                                    configurationService: ConfigurationService) extends PriorityStashedActor{
+                                    configurationService: ConfigurationService,
+                                    actorSystem: ActorSystem) extends PriorityStashedActor{
 
 
 
@@ -145,7 +146,7 @@ class ClusterLeaderActor @Inject()(
       case Success(r) =>
         debug("Loaded the default cluster configuration, packageLeaders and their workers. We try to start the local manager")
 
-        localManager = Option(context.actorOf(Props.create(classOf[Manager], electionService, configurationService, r._1, _cluster.get), name = "LocalManager"))
+        localManager = Option(context.actorOf(Props(new Manager(electionService, configurationService, r._1, _cluster.get, actorSystem)), name = "LocalManager"))
         localManager.get ! IAmTheWorkerLeader(r._3)
 
         Success(r)
@@ -158,8 +159,8 @@ class ClusterLeaderActor @Inject()(
 
   private def sendInfoToManager(): Future[Unit] = {
     val f = for {
-      notifyWorkerTypeInfo <- service.notifyWorkerTypeInfo(_componentLeader.get)
-      postManagerConnections <- ClusterTools.foldFutures(_componentLeader.get.packageLeaders.toIterator, (pck: PackageLeaderApi) => {pck.postManagerConnection()})
+      _ <- service.notifyWorkerTypeInfo(_componentLeader.get)
+      _ <- ClusterTools.foldFutures(_componentLeader.get.packageLeaders.toIterator, (pck: PackageLeaderApi) => {pck.postManagerConnection()})
     } yield {
       debug("Successfully sent the WorkerTypeInfos & Orders to the manager, and executed the postManagerConnections.")
     }

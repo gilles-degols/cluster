@@ -25,6 +25,9 @@ case class FinishedProcessing(message: Any) extends PriorityStashedMessage(5)
 @SerialVersionUID(0L)
 case class GetActorStatistics() extends PriorityStashedMessage(5)
 
+@SerialVersionUID(0L)
+case class IsMessageKnown(message: Any) extends PriorityStashedMessage(20)
+
 /**
   * Handle the priority of messages not yet in the custom stash. As we won't always have a fast execution of messages
   * (maybe someone decided to do an Await or Thread.sleep somewhere), we cannot really guarantee the priority of messages
@@ -45,8 +48,8 @@ final class PriorityStashedMailbox(settings: ActorSystem.Settings, config: Confi
   */
 @SerialVersionUID(0L)
 class ActorStatistics(val actorRef: ActorRef) {
-  private var _lastMessageDateTime: DateTime = new DateTime()
-  def lastMessageDateTime: DateTime = _lastMessageDateTime
+  private var _lastMessageTimestamp: Long = 0
+  def lastMessageTimestamp: Long = _lastMessageTimestamp
 
   private var _totalProcessedMessages: Long = 0
   def totalProcessedMessage: Long = _totalProcessedMessages
@@ -58,9 +61,9 @@ class ActorStatistics(val actorRef: ActorRef) {
     * Execution time is in micro-seconds
     * @param executionTime
     */
-  def addProcessedMessage(executionTime: Long): Unit = {
+  def addProcessedMessage(executionTime: Long, currentTime: Long): Unit = {
     _averageProcessingTime = _averageProcessingTime + (executionTime - _averageProcessingTime)*1.0 / (_totalProcessedMessages + 1.0)
-    _lastMessageDateTime = new DateTime()
+    _lastMessageTimestamp = currentTime
     _totalProcessedMessages += 1
   }
 }
@@ -95,6 +98,10 @@ abstract class PriorityStashedActor extends Actor with Logging {
 
   protected val maximumRunningMessages: Int = 1
 
+  // Allow to detect if endProcessing was properly called by the developer. If not, we log an error, and called endprocessing
+  // ourselves (this means that if there is a future running wild, we cannot do anything about it)
+  private var endProcessingCalled: Boolean = false
+
   /**
     * Wrapper around developer's code. Catch unexpected errors and avoid the PriorityStashed to be "stuck" because
     * of that
@@ -103,7 +110,12 @@ abstract class PriorityStashedActor extends Actor with Logging {
     */
   private def callAroundReceive(receive: Receive, message: Any): Unit = {
     Try{
+      endProcessingCalled = false
       super.aroundReceive(receive, message)
+      if(!endProcessingCalled) {
+        warn(s"$id: The developer forgot to call the endProcessing method after processing a message. We assume the processing is finished.")
+        endProcessing(message)
+      }
     } match {
       case Success(r) => r
       case Failure(e) =>
@@ -120,6 +132,10 @@ abstract class PriorityStashedActor extends Actor with Logging {
       case x: ExecuteElementNow =>
         callAroundReceive(receive, x.message)
 
+      case isMessageKnown: IsMessageKnown =>
+        val res = runningMessages.contains(isMessageKnown.message) || customStash.values.map(_.find(elem => elem.message == isMessageKnown.message)).nonEmpty
+        sender() ! res
+
       case xWrapper: FinishedProcessing =>
         trace(s"$id: Received FinishedProcessing message for ${xWrapper.message}.")
 
@@ -127,7 +143,7 @@ abstract class PriorityStashedActor extends Actor with Logging {
         runningMessages.get(xWrapper.message) match {
           case Some(previousMessage) =>
             val diff = (System.nanoTime() - previousMessage.creationTime) / 1000L
-            actorStatistics.addProcessedMessage(diff)
+            actorStatistics.addProcessedMessage(diff, new DateTime().getMillis)
             runningMessages.remove(xWrapper.message)
           case None =>
             error(s"$id: Tried to remove message ${xWrapper.message} but we did not find it in the running messages: ${runningMessages.map(_.toString()).mkString(", ")}.")
@@ -190,6 +206,7 @@ abstract class PriorityStashedActor extends Actor with Logging {
     * @param message
     */
   def endProcessing(message: Any, future: Future[Any] = null): Unit = {
+    endProcessingCalled = true
     if(future != null) {
       future.andThen{
         case anyResult =>

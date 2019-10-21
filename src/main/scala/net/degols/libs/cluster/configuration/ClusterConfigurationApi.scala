@@ -63,9 +63,6 @@ trait ClusterConfigurationApi {
     */
   val akkaLocalHostname: Future[String]
   val akkaLocalPort: Future[Int]
-
-  val akkaClusterRemoteHostname: Future[String]
-  val akkaClusterRemotePort: Future[Int]
 }
 
 /**
@@ -86,9 +83,7 @@ private[cluster] case class ClusterConfiguration(
                                  clusterInfoCacheTimeout: Int,
                                  clusterInfoTimeout: Int,
                                  akkaLocalHostname: String,
-                                 akkaLocalPort: Int,
-                                 akkaClusterRemoteHostname: String,
-                                 akkaClusterRemotePort: Int
+                                 akkaLocalPort: Int
                                )
 
 object ClusterConfiguration {
@@ -104,8 +99,6 @@ object ClusterConfiguration {
       clusterInfoTimeout <- clusterConfigurationApi.clusterInfoTimeout
       akkaLocalHostname <- clusterConfigurationApi.akkaLocalHostname
       akkaLocalPort <- clusterConfigurationApi.akkaLocalPort
-      akkaClusterRemoteHostname <- clusterConfigurationApi.akkaClusterRemoteHostname
-      akkaClusterRemotePort <- clusterConfigurationApi.akkaClusterRemotePort
     } yield {
       ClusterConfiguration(
         clusterConfigurationApi.executionContext,
@@ -118,9 +111,7 @@ object ClusterConfiguration {
         clusterInfoCacheTimeout,
         clusterInfoTimeout,
         akkaLocalHostname,
-        akkaLocalPort,
-        akkaClusterRemoteHostname,
-        akkaClusterRemotePort
+        akkaLocalPort
       )
     }
   }

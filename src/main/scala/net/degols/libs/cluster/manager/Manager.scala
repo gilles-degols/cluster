@@ -1,7 +1,7 @@
 package net.degols.libs.cluster.manager
 
 import javax.inject.{Inject, Singleton}
-import akka.actor.{ActorRef, Cancellable, Terminated}
+import akka.actor.{ActorRef, ActorSystem, Cancellable, Terminated}
 import net.degols.libs.cluster.balancing.{BasicLoadBalancer, LoadBalancer}
 import net.degols.libs.cluster.configuration.{ClusterConfiguration, ClusterConfigurationApi, DefaultClusterConfiguration}
 import net.degols.libs.cluster.core.{Cluster, ClusterManagement}
@@ -26,8 +26,9 @@ import scala.util.{Failure, Success, Try}
 final class Manager(electionService: ElectionService,
                               configurationService: ConfigurationService,
                               clusterConfiguration: ClusterConfiguration,
-                              cluster: Cluster)
-                    extends ElectionWrapper(electionService, configurationService) with Logging{
+                              cluster: Cluster,
+                              actorSystem: ActorSystem)
+                    extends ElectionWrapper(electionService, configurationService, actorSystem) with Logging{
 
   private var _previousLeader: Option[ActorRef] = None
   private var _previousLeaderWrapper: Option[ActorRef] = None

@@ -1,25 +1,15 @@
 name := "cluster"
 organization := "net.degols.libs"
-version := "1.0.1"
+version := "1.1.0"
 
 scalacOptions ++= Seq("-deprecation", "-feature", "-language:postfixOps")
 
 scalaVersion := "2.12.8"
-lazy val playVersion = "2.6.1"
-lazy val akkaVersion = "2.5.2"
-lazy val electionLibraryVersion = "1.0.0"
+lazy val playVersion = "2.6.13"
+lazy val electionLibraryVersion = "1.1.0"
+val useLocalElectionLibrary = true
 
-libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion exclude("log4j", "log4j") exclude("org.slf4j","slf4j-log4j12"),
-  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-  "com.typesafe.akka" %% "akka-stream-kafka" % "0.19",
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion
-)
-
-libraryDependencies += "com.google.inject" % "guice" % "3.0"
 libraryDependencies += "com.typesafe.play" %% "play-json" % playVersion
-libraryDependencies += "joda-time" % "joda-time" % "2.10"
 libraryDependencies += "com.github.cb372" %% "scalacache-core" % "0.27.0"
 libraryDependencies += "com.github.cb372" %% "scalacache-caffeine" % "0.27.0"
 libraryDependencies += "commons-io" % "commons-io" % "2.4"
@@ -27,7 +17,6 @@ libraryDependencies += "commons-io" % "commons-io" % "2.4"
 // Election library
 val electionPath = "../election"
 lazy val electionLibrary: RootProject = RootProject(file(electionPath))
-val useLocalElectionLibrary = false
 val localElectionAvailable = scala.reflect.io.File(scala.reflect.io.Path(electionPath)).exists
 lazy val cluster = if(localElectionAvailable && useLocalElectionLibrary) {
   (project in file(".")).dependsOn(electionLibrary)
