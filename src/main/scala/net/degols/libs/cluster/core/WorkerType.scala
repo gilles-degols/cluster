@@ -71,6 +71,10 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
 
     // No need to go one step below, there is nothing to re-construct on the Worker level
   }
+
+  override def toString: String = {
+    s"WorkerType($id, $workerTypeInfo)"
+  }
 }
 
 object WorkerType {

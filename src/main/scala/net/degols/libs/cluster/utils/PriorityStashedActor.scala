@@ -47,7 +47,7 @@ final class PriorityStashedMailbox(settings: ActorSystem.Settings, config: Confi
   * use the Lightbend Telemetry or Kamon if you want more specific information.
   */
 @SerialVersionUID(0L)
-class ActorStatistics(val actorRef: ActorRef) {
+class ActorStatistics(val actorRef: ActorRef) extends Serializable {
   private var _lastMessageTimestamp: Long = 0
   def lastMessageTimestamp: Long = _lastMessageTimestamp
 

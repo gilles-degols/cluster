@@ -102,7 +102,7 @@ object WorkerTypeInfo {
 /**
   * Some trait used to indicate we ask information from the Manager
   */
-trait ClusterInfo
+trait ClusterInfo extends Serializable
 
 /**
   * Ask some information about a given ActorRef. The manager will reply with an "Option[InfoFromActorRef]"

@@ -73,15 +73,20 @@ class BasicLoadBalancer extends LoadBalancer {
 
       nodes.flatMap(_.workerManagers.filter(_.isUp))
         .foreach(workerManager => {
-          val runningInstances = workerManager.workerTypes.find(_ == workerType).get.workers.filter(_.isUp).filter(_.orderId == workerTypeOrder.id)
+          workerManager.workerTypes.find(_ == workerType) match {
+            case Some(wType) =>
+              val runningInstances = wType.workers.filter(_.isUp).filter(_.orderId == workerTypeOrder.id)
 
-          var i = runningInstances.size
-          if(i < wantedInstances) {
-            info(s"Starting ${wantedInstances - i} instances of $workerType on $this")
-          }
-          while(i < wantedInstances) {
-            workerManager.startWorker(context, workerType, workerTypeOrder)
-            i += 1
+              var i = runningInstances.size
+              if(i < wantedInstances) {
+                info(s"Starting ${wantedInstances - i} instances of $workerType on $this")
+              }
+              while(i < wantedInstances) {
+                workerManager.startWorker(context, workerType, workerTypeOrder)
+                i += 1
+              }
+            case None =>
+              debug(s"We did not find the given workerType ${workerType} inside the WorkerManager ${workerManager}, this probably means this is a WorkerType linked to another WorkerManager.")
           }
         })
     }

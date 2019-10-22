@@ -18,13 +18,13 @@ import scala.util.Try
   * Created by Gilles.Degols on 03-09-18.
   */
 @Singleton
-class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends ClusterConfigurationApi with ConfigurationMerge {
+class DefaultClusterConfiguration @Inject()(cfg: ConfigurationMerge) extends ClusterConfigurationApi {
 
   /**
     * Configuration for the cluster system. We merge multiple configuration files: One embedded, the other one from the project
     * using the cluster library
     */
-  val clusterConfig: Config = config.getConfig("cluster")
+  val clusterConfig: Config = cfg.config.getConfig("cluster")
 
   /**
     * General execution context to use in the system
@@ -41,20 +41,20 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
 
   override lazy val watcherTimeoutBeforeSuicide: Future[FiniteDuration] = {
     Future{
-      config.getInt("cluster.watcher-timeout-before-suicide-ms") millis
+      cfg.config.getInt("cluster.watcher-timeout-before-suicide-ms").millis
     }
   }
 
   override lazy val softWorkDistributionFrequency: Future[FiniteDuration] = {
     // TODO: Frequency should be given for each load balancer
     Future{
-      config.getInt("cluster.soft-work-distribution-ms") millis
+      cfg.config.getInt("cluster.soft-work-distribution-ms").millis
     }
   }
 
   override lazy val hardWorkDistributionFrequency: Future[FiniteDuration] = {
     Future{
-      config.getInt("cluster.hard-work-distribution-ms") millis
+      cfg.config.getInt("cluster.hard-work-distribution-ms").millis
     }
   }
 
@@ -63,7 +63,7 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
     */
   override val startWorkerTimeout: Future[FiniteDuration] = {
     Future {
-      config.getInt("cluster.start-worker-timeout-ms") millis
+      cfg.config.getInt("cluster.start-worker-timeout-ms").millis
     }
   }
 
@@ -73,7 +73,7 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
     */
   override val clusterInfoCacheSize: Future[Int] = {
     Future{
-      config.getInt("cluster.cache.cluster-info-size")
+      cfg.config.getInt("cluster.cache.cluster-info-size")
     }
   }
 
@@ -82,7 +82,7 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
     */
   override val clusterInfoCacheTimeout: Future[Int] = {
     Future{
-      config.getInt("cluster.cache.cluster-info-lifetime-s")
+      cfg.config.getInt("cluster.cache.cluster-info-lifetime-s")
     }
   }
 
@@ -91,22 +91,21 @@ class DefaultClusterConfiguration @Inject()(val defaultConfig: Config) extends C
     */
   override val clusterInfoTimeout: Future[Int] = {
     Future{
-      config.getInt("cluster.cluster-info-timeout-s")
+      cfg.config.getInt("cluster.cluster-info-timeout-s")
     }
   }
 
   /**
     * It's difficult to get a remote actor path locally. Because of that, we still want to know the current hostname + port
     */
-  override val akkaLocalHostname: String = config.getString("akka.remote.netty.tcp.hostname")
-  override val akkaLocalPort: Int = config.getInt("akka.remote.netty.tcp.port")
+  override val akkaLocalHostname: String = cfg.config.getString("akka.remote.netty.tcp.hostname")
+  override val akkaLocalPort: Int = cfg.config.getInt("akka.remote.netty.tcp.port")
 
   /**
     * Methods to get data from the embedded configuration, or the project configuration (it can override it)
     */
   private def getStringList(path: String): Seq[String] = {
-    config.getStringList(path).asScala.toList
+    cfg.config.getStringList(path).asScala.toList
   }
 
-  override val directoryName: String = "cluster"
 }

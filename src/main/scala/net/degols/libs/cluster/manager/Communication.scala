@@ -4,7 +4,7 @@ import akka.actor.{ActorContext, ActorRef}
 import akka.util.Timeout
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future, TimeoutException}
 import scala.util.{Failure, Random, Success, Try}
 import akka.pattern.ask
 import net.degols.libs.cluster.messages.{ClusterRemoteMessage, GetActorRefsFor, GetAllWorkerTypeIds, GetInfoFromActorRef, InfoFromActorRef, MessageWasHandled, MissingActor, UnrespondingManager, WorkerActorHealth, WorkerTypeOrder}
@@ -25,8 +25,8 @@ class Communication(service: ClusterServiceLeader) extends Logging {
     * Return information about an actorRef. Typically useful to find our own orderId
     */
   def infoFromActorRef(targetActorRef: ActorRef)(implicit context: ActorContext): Future[Option[InfoFromActorRef]] = {
-    implicit val sender = context.self
-    implicit val ac = context.dispatcher
+    implicit val sender: ActorRef = context.self
+    implicit val ac: ExecutionContextExecutor = context.dispatcher
     val m = GetInfoFromActorRef(sender, targetActorRef)
 
     service.askClusterInfo(m)

@@ -97,6 +97,10 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
 
     workerTypes.foreach(workerType => workerType.reconstructFromClusterTopology(clusterTopology, currentNode, this))
   }
+
+  override def toString: String = {
+    s"WorkerManager($id, $actorRef)"
+  }
 }
 
 object WorkerManager {
