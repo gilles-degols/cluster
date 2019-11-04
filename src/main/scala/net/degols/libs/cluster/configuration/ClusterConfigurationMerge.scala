@@ -4,5 +4,5 @@ import net.degols.libs.election.ConfigurationMerge
 
 @Singleton
 class ClusterConfigurationMerge extends ConfigurationMerge {
-  override val directories: Seq[String] = Seq("cluster","election")
+  override val filenames: Seq[String] = Seq("application.cluster.conf","application.election.conf")
 }
