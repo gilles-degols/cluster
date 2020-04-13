@@ -44,3 +44,4 @@ usePgpKeyHex("C0FAC2FE")
 lazy val username = Option(System.getenv("SONATYPE_USER")).getOrElse("sonatype_user")
 lazy val password = Option(System.getenv("SONATYPE_PASSWORD")).getOrElse("sonatype_password")
 credentials += Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)
+resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/releases"
