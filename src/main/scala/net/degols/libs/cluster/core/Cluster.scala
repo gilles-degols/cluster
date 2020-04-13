@@ -55,7 +55,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
     _orders.get(workerTypeOrder.id) match {
       case Some(wrapper) =>
         wrapper.actors.add(workerTypeOrder.actorRef)
-      case None=>
+      case None =>
         val actors = mutable.Set(workerTypeOrder.actorRef)
         _orders.put(workerTypeOrder.id, WorkerTypeOrderWrapper(workerTypeOrder, actors))
     }
@@ -104,8 +104,8 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
     }
 
     watcherAttempt match {
-      case Success(res) =>
-      case Failure(err) => error(s"Impossible to watch the sender of a WorkerTypeOrder: $workerTypeOrder")
+      case Success(_) =>
+      case Failure(_) => error(s"Impossible to watch the sender of a WorkerTypeOrder: $workerTypeOrder")
     }
 
     watcherAttempt
@@ -124,7 +124,7 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
     // For whatever reason, we can receive twice the same message even if the worker is already started.
     val workerTypeInfo = WorkerTypeInfo.fromWorkerTypeInfo(startedWorkerActor.startWorkerActor.workerTypeInfo, startedWorkerActor.actorRef, startedWorkerActor.nodeInfo)
     Cluster.getWorkerFromWorkerId(this, startedWorkerActor.startWorkerActor.workerId, startedWorkerActor.jvmId) match {
-      case Some(previousWorker) =>
+      case Some(_) =>
         val worker = Cluster.getAndAddWorker(this, workerTypeInfo, startedWorkerActor.startWorkerActor.workerTypeOrder.id, startedWorkerActor.startWorkerActor.workerId, Option(startedWorkerActor.runningActorRef))
         worker.setStatus(ClusterElementRunning())
       case None =>
@@ -188,7 +188,8 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
     * If no WorkerOrder is alive anymore (for the same id), the related workers will be directly removed.
     */
   def registerFailedWorkerOrderSender(context: ActorContext, actorRef: ActorRef): Unit = {
-    _orders.filter(_._2.actors.remove(actorRef))
+    _orders
+      .filter(_._2.actors.remove(actorRef))
       .filter(_._2.actors.isEmpty)
       .map(raw => {
         warn(s"There are no remaining initiators of the WorkerTypeOrder for WorkerTypeId ${raw._2.order.workerTypeId}, remove the order and ask for the killing of the related actors.")
@@ -203,15 +204,18 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
     * By having a failed WorkerLeader, it means that the status of any object beneath it is unknown, but we will most likely
     * also receive Terminated message and so on for each actor.
     */
-  def registerFailedWorkerLeader(actorRef: ActorRef): Boolean = {
+  def registerFailedWorkerLeader(actorRef: ActorRef)(implicit context: ActorContext): Boolean = {
     // Update the general information for the topology
-    val workerLeader = Cluster.getWorkerManager(this, actorRef)
-    workerLeader match {
+    Cluster.getWorkerManagerFromActorLeader(this, actorRef) match {
       case Some(workLeader) =>
-        workLeader.setStatus(ClusterElementFailed(new TerminatedActor(s"$actorRef")))
+        info(s"Remove the $workLeader, and all its related actors, as the main actor died")
+        // We need to completely remove everything linked to the workerLeader, as it contains invalid actorRef everywhere:
+        // generally the workerLeader dies when the JVM dies, so every actor ref will be invalid
+        workLeader.cleanupForRemoval()
+        _nodes.foreach(_.removeWorkerManager(workLeader))
         true
       case None =>
-        debug(s"Failed ActorRef $actorRef is not linked to a known WorkerActor. Maybe it's a WorkerLeader?")
+        debug(s"Failed ActorRef $actorRef is not linked to a known WorkerLeader. Maybe it's a WorkerActor?")
         false
     }
   }
@@ -315,28 +319,44 @@ class Cluster(clusterConfiguration: ClusterConfiguration) extends Logging{
   }
 
   override def toString: String = {
-    // WorkerTypeId -> List(orders)
-    val orders: Map[String, Seq[WorkerTypeOrderWrapper]] = _orders.groupBy(_._2.order.workerTypeId).map(raw => raw._1 -> raw._2.values.toList)
+    // WorkerTypeId -> List(orderId, order)
+    val orders: Map[String, mutable.Map[String, WorkerTypeOrderWrapper]] = _orders.groupBy(_._2.order.workerTypeId).map(raw => raw._1 -> raw._2)
 
-    nodes.flatMap(node => {
+    // Status of the cluster if some worker managers are not there yet/anymore. We show all of them
+    val clusterWithoutManager = orders.map(order => {
+      val specificOrderIds = order._2.map(o => {
+        s"\t\t${o._1} - ${o._2.order.loadBalancerType}"
+      }).mkString("\n")
+      s"\t${order._1}\n$specificOrderIds"
+    }).mkString("\n")
+    val clusterWithoutManagerText = s"Cluster orders\n$clusterWithoutManager\n"
+
+    // Status of the cluster if we have all running worker managers (which might not always be the case) related to every
+    // existing order
+    val clusterText = nodes.flatMap(node => {
       val nodeText: String = s"Node: ${node.hostname}"
       node.workerManagers.map(workerManager => {
         val workerManagerText: String = s"$nodeText - port: ${workerManager.port}"
         val workerTypeTexts: String = workerManager.workerTypes.map(workerType => {
-          // Go through every order for the given workerType
-          val prettyOrders = orders.getOrElse(workerType.workerTypeInfo.workerTypeId, List.empty[WorkerTypeOrderWrapper])
-              .map(order => {
-                s"${order.order.loadBalancerType}"
-              }).mkString(", ")
+          // Go through every order for the given workerType.
+          val prettyOrders = orders.get(workerType.workerTypeInfo.workerTypeId) match {
+            case Some(orderForWorkerTypeId) =>
+              orderForWorkerTypeId.map(order => s"\t\t${order._1} - ${order._2.order.loadBalancerType}").mkString("\n")
+            case None =>
+              "\t\tNo order yet"
+          }
 
-          val workerTypeText: String = s"\t${workerType.id} - orders: ${prettyOrders} -"
-          val workerTexts = workerType.workers.map(worker => worker.status.toString).groupBy(status => status).map(status => s"${status._1}: ${status._2.size}").mkString(", ")
-          s"$workerTypeText $workerTexts"
+          val workerTexts = if(workerType.workers.nonEmpty) workerType.workers.map(worker => worker.status.toString).groupBy(status => status).map(status => s"${status._1}: ${status._2.size}").mkString(", ")
+          else "No worker yet"
+
+          s"\t${workerType.id} - $workerTexts\n $prettyOrders"
         }).mkString("\n")
 
         s"$workerManagerText\n$workerTypeTexts"
       }).mkString("\n")
     }).mkString("")
+
+    s"$clusterWithoutManagerText\n\n$clusterText"
   }
 }
 
@@ -351,7 +371,7 @@ object Cluster {
     cluster.nodes.flatMap(node => node.workerManagers.map(workerManager => (node, workerManager)))
       .flatMap(obj => obj._2.workerTypes.map(workerType => (obj._1, workerType)))
       .flatMap(obj => obj._2.workers.map(worker => (obj._1, worker)))
-      .find(obj => obj._2.actorRef.isDefined && obj._2.actorRef.get == actorRef)
+      .find(obj => obj._2.actorRef.contains(actorRef))
       .map(_._1)
   }
 
@@ -361,11 +381,15 @@ object Cluster {
     node.addWorkerManager(rawWorkerManager)
   }
 
-  def getWorkerManager(cluster: Cluster, actorRef: ActorRef): Option[WorkerManager] = {
+  def getWorkerManagerFromActorLeader(cluster: Cluster, actorRef: ActorRef): Option[WorkerManager] = {
+    cluster.nodes.flatMap(_.workerManagers.find(_.actorRef == actorRef)).headOption
+  }
+
+  def getWorkerManagerFromWorkerActor(cluster: Cluster, actorRef: ActorRef): Option[WorkerManager] = {
     cluster.nodes.flatMap(_.workerManagers)
       .flatMap(obj => obj.workerTypes.map(workerType => (obj, workerType)))
       .flatMap(obj => obj._2.workers.map(worker => (obj._1, worker)))
-      .find(obj => obj._2.actorRef.isDefined && obj._2.actorRef.get == actorRef)
+      .find(obj => obj._2.actorRef.contains(actorRef))
       .map(_._1)
   }
 
@@ -378,7 +402,7 @@ object Cluster {
   def getWorkerType(cluster: Cluster, actorRef: ActorRef): Option[WorkerType] = {
     cluster.nodes.flatMap(_.workerManagers).flatMap(_.workerTypes)
       .flatMap(obj => obj.workers.map(worker => (obj, worker)))
-      .find(obj => obj._2.actorRef.isDefined && obj._2.actorRef.get == actorRef)
+      .find(obj => obj._2.actorRef.contains(actorRef))
       .map(_._1)
   }
 

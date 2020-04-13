@@ -1,14 +1,18 @@
 package net.degols.libs.cluster.core
 
+import akka.actor.ActorContext
 import net.degols.libs.cluster.ClusterTools
-import net.degols.libs.cluster.messages.{ClusterTopology, InstanceType, NodeInfo, WorkerTypeInfo}
+import net.degols.libs.cluster.messages.{ClusterTopology, InstanceType, KillWorkerActor, NodeInfo, WorkerTypeInfo}
+import net.degols.libs.cluster.utils.Logging
+
+import scala.util.Try
 
 /**
   * A WorkerType manages all worker instances of the same type as itself.
   *
   * @param id
   */
-class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
+class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) extends Logging{
   private var _workers: Seq[Worker] = List.empty[Worker]
 
   /**
@@ -36,6 +40,16 @@ class WorkerType(val id: String, val workerTypeInfo: WorkerTypeInfo) {
         _workers = _workers :+ rawWorker
         rawWorker
     }
+  }
+
+  /**
+    * Cleanup the WorkerType and its related actors.
+    * @return
+    */
+  def cleanupForRemoval()(implicit context: ActorContext): Unit = {
+    warn(s"Cleaning $this from ${_workers.size} workers to prepare for its removal")
+    _workers.foreach(_.actorRef.foreach(ref => Try{ref ! KillWorkerActor(context.self)}))
+    _workers = Seq.empty
   }
 
   def workers: Seq[Worker] = _workers

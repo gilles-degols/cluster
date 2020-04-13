@@ -32,6 +32,15 @@ class Node(val hostname: String) {
     }
   }
 
+  /**
+    * If a workerManager dies, we have to remove it from the current node
+    * @param rawWorkerManager
+    * @return
+    */
+  def removeWorkerManager(rawWorkerManager: WorkerManager): Unit = {
+    _workerManagers = _workerManagers.filter(_ != rawWorkerManager)
+  }
+
   def workerManagers: Seq[WorkerManager] = _workerManagers
 
 

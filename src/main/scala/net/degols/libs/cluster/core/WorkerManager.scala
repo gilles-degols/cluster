@@ -14,6 +14,8 @@ import scala.util.{Failure, Success, Try}
   * the hostname and a unique string gathered by the remote process (the PID for example). There is one WorkerManager
   * per JVM, it will handle multiple WorkerTypes.
   *
+  * If the actorRef linked to the WorkerManager dies, we have to kill every related workerType / workers, as the restarted
+  * process will have a new actorRef (so the previous one remains invalid, and we cannot contact it anymore)
   * @param id
   */
 class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterElement{
@@ -37,6 +39,22 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
   }
 
   /**
+    * Remove a specific worker type
+    */
+  def removeWorkerType(rawWorkerType: WorkerType): Unit = {
+    _workerTypes = _workerTypes.filter(_ != rawWorkerType)
+  }
+
+  /**
+    * Properly cleanup the workerManager when we need to delete it
+    */
+  def cleanupForRemoval()(implicit context: ActorContext): Unit = {
+    warn(s"Cleaning $this to prepare for its removal")
+    _workerTypes.foreach(_.cleanupForRemoval())
+    _workerTypes = Seq.empty
+  }
+
+  /**
     * Ask the distant actor to launch a specific instance of given WorkerType. This communication is async but we create
     * a related Worker locally to remember that we just ask for it to launch
     */
@@ -46,6 +64,7 @@ class WorkerManager(val id: String, val actorRef: ActorRef) extends ClusterEleme
       case Some(w) =>
         val workerId = Worker.generateWorkerId(workerType.workerTypeInfo)
         Try {
+          info(s"Sending StartWorkerActor for ${workerTypeOrder} / $workerId to $actorRef, as the current $this has the status $status")
           actorRef ! StartWorkerActor(context.self, workerType.workerTypeInfo, workerTypeOrder, workerId)
         } match {
           case Success(res) =>

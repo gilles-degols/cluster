@@ -110,9 +110,9 @@ class ClusterLeaderActor @Inject()(
       })
 
       // Setting up the workers
-      setupWorkers <- ClusterTools.foldFutures(packageLeaders.toIterator, (pck: PackageLeaderApi) => {
+      _ <- ClusterTools.foldFutures(packageLeaders.toIterator, (pck: PackageLeaderApi) => {
         pck.setupWorkers().andThen{
-          case Success(r) => debug(s"Workers setup done for package $pck")
+          case Success(_) => debug(s"Workers setup done for package $pck")
           case Failure(e) => error(s"Impossible to setup the worker for package $pck", e)
         }
       })
@@ -158,6 +158,7 @@ class ClusterLeaderActor @Inject()(
   }
 
   private def sendInfoToManager(): Future[Unit] = {
+    debug(s"Send information regarding our own service to the cluster manager")
     val f = for {
       _ <- service.notifyWorkerTypeInfo(_componentLeader.get)
       _ <- ClusterTools.foldFutures(_componentLeader.get.packageLeaders.toIterator, (pck: PackageLeaderApi) => {pck.postManagerConnection()})

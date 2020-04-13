@@ -129,6 +129,7 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
         ordersForType
       })
 
+    info(s"Check load balancing state, based on the following current cluster status: \n$cluster")
     // Execute the load balancing, one workerTypeOrder at a time. This must be fast to avoid problem with actor queue
     // filling up if we take too much time here.
     ClusterTools.foldFutures(workerOrdersAndTypes.toIterator, (raw: (WorkerType, WorkerTypeOrder)) => {
@@ -147,14 +148,14 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
 
             distribution.transformWith{
               case Success(res) =>
-                Future.successful{}
+                Future.unit
               case Failure(err) =>
                 error(s"Exception occurred while trying to distribute the work of $workerType", err)
-                Future.successful{} // Even if there we as a problem, we do not care
+                Future.unit // Even if there we as a problem, we do not care
             }
           case None =>
             error(s"There is no loadBalancer accepting the type ${order.loadBalancerType}!")
-            Future.successful{}
+            Future.unit
         }
       }.flatten
     })
@@ -171,7 +172,7 @@ class ClusterManagement(context: ActorContext, val cluster: Cluster, clusterConf
     * If another actor sent the same order, no problem.
     * If no-one is alive anymore, the Cluster will directly remove the related actors.
     */
-  def removeWatchedActor(actorRef: ActorRef): Unit = {
+  def removeWatchedActor(actorRef: ActorRef)(implicit context: ActorContext): Unit = {
     cluster.registerFailedWorkerOrderSender(context, actorRef)
     _clusterTopology.removeWorkerActor(actorRef)
 

@@ -1,6 +1,6 @@
 name := "cluster"
 organization := "net.degols.libs"
-version := "1.1.0"
+version := "1.1.1"
 
 scalacOptions ++= Seq("-deprecation", "-feature", "-language:postfixOps")
 
